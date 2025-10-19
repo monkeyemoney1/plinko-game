@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: plinko-game
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TON_NETWORK
+        value: testnet
+      - key: TON_API_KEY
+        value: AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PROMETHEUS_ENABLED
+        value: false
+      - key: LOG_LEVEL
+        value: info
+
+databases:
+  - name: plinko-db
+    databaseName: plinko_game
+    user: plinko_user
+    plan: starter

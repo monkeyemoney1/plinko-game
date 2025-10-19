@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manual Deposit Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>Manual Deposit Verification Test</h1>
+    
+    <div>
+        <h3>Create Test Deposit</h3>
+        <input type="text" id="wallet" placeholder="Wallet Address" value="UQAV4xF-C6dxzz5wffcsOS7ujOSnBqi_F03mWqFGJX0IN7w7">
+        <input type="number" id="amount" placeholder="Amount (TON)" value="1.0" step="0.1">
+        <button onclick="createDeposit()">Create Deposit</button>
+    </div>
+    
+    <div>
+        <h3>Verify Deposit</h3>
+        <input type="number" id="depositId" placeholder="Deposit ID">
+        <button onclick="verifyDeposit()">Verify Deposit</button>
+    </div>
+    
+    <div>
+        <h3>Check Game Wallet</h3>
+        <button onclick="checkGameWallet()">Get Game Wallet Address</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function createDeposit() {
+            const wallet = document.getElementById('wallet').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            
+            const data = {
+                user_id: 1, // Тестовый user_id
+                wallet_address: wallet,
+                amount: amount
+            };
+            
+            try {
+                const res = await fetch('/api/deposits/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await res.json();
+                
+                displayResult('Create Deposit', res.status, result);
+                
+                if (res.ok && result.deposit_id) {
+                    document.getElementById('depositId').value = result.deposit_id;
+                }
+            } catch (error) {
+                displayResult('Create Deposit', 'ERROR', { error: error.message });
+            }
+        }
+        
+        async function verifyDeposit() {
+            const depositId = parseInt(document.getElementById('depositId').value);
+            
+            if (!depositId) {
+                alert('Please enter a deposit ID');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/deposits/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deposit_id: depositId })
+                });
+                
+                const result = await res.json();
+                
+                displayResult('Verify Deposit', res.status, result);
+            } catch (error) {
+                displayResult('Verify Deposit', 'ERROR', { error: error.message });
+            }
+        }
+        
+        async function checkGameWallet() {
+            try {
+                const res = await fetch('/api/game/wallet');
+                const result = await res.json();
+                
+                displayResult('Game Wallet', res.status, result);
+            } catch (error) {
+                displayResult('Game Wallet', 'ERROR', { error: error.message });
+            }
+        }
+        
+        function displayResult(action, status, data) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            
+            const isSuccess = status >= 200 && status < 300;
+            resultDiv.className = isSuccess ? 'result success' : 'result error';
+            
+            resultDiv.innerHTML = `
+                <strong>${action}</strong><br>
+                <strong>Status:</strong> ${status}<br>
+                <strong>Response:</strong> <pre>${JSON.stringify(data, null, 2)}</pre>
+                <strong>Time:</strong> ${new Date().toLocaleTimeString()}
+            `;
+            
+            results.insertBefore(resultDiv, results.firstChild);
+        }
+    </script>
+</body>
+</html>

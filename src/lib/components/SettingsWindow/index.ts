@@ -1,0 +1,1 @@
+// Settings window component removed

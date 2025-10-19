@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Comprehensive API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Comprehensive API Test</h1>
+    <button onclick="testAllAPIs()">Тест всех API</button>
+    <button onclick="clearResults()">Очистить результаты</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testAllAPIs() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Тестирование API...</p>';
+            
+            // Test 1: Game Wallet
+            await testAPI('GET', '/api/game/wallet', null, 'Получение адреса игрового кошелька');
+            
+            // Test 2: Wallet Balance (with test address)
+            const testAddress = 'UQAV4xF-C6dxzz5wffcsOS7ujOSnBqi_F03mWqFGJX0IN7w7';
+            await testAPI('GET', `/api/wallet/balance?address=${testAddress}`, null, 'Получение баланса кошелька');
+            
+            // Test 3: Users endpoint (POST - create user)
+            const testUserData = {
+                telegram_id: '123456789',
+                username: 'testuser',
+                first_name: 'Test',
+                ton_address: testAddress
+            };
+            await testAPI('POST', '/api/users', testUserData, 'Создание пользователя');
+            
+            // Test 4: Deposits create
+            const depositData = {
+                wallet_address: testAddress,
+                amount: 1.0
+            };
+            await testAPI('POST', '/api/deposits/create', depositData, 'Создание депозита');
+        }
+        
+        async function testAPI(method, url, data, description) {
+            const results = document.getElementById('results');
+            
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                const response = await fetch(url, options);
+                const responseText = await response.text();
+                
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch {
+                    responseData = responseText;
+                }
+                
+                const resultDiv = document.createElement('div');
+                resultDiv.className = response.ok ? 'result success' : 'result error';
+                resultDiv.innerHTML = `
+                    <strong>${description}</strong><br>
+                    <strong>URL:</strong> ${method} ${url}<br>
+                    <strong>Status:</strong> ${response.status} ${response.statusText}<br>
+                    <strong>Response:</strong> <pre>${JSON.stringify(responseData, null, 2)}</pre>
+                `;
+                results.appendChild(resultDiv);
+                
+            } catch (error) {
+                const resultDiv = document.createElement('div');
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <strong>${description}</strong><br>
+                    <strong>URL:</strong> ${method} ${url}<br>
+                    <strong>Error:</strong> ${error.message}
+                `;
+                results.appendChild(resultDiv);
+            }
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

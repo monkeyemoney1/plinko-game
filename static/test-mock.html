@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deposit Mock Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; padding: 15px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Deposit Mock Test</h1>
+    
+    <div class="warning">
+        <strong>Тестовый режим:</strong> Этот интерфейс имитирует успешную верификацию депозита для тестирования обновления баланса.
+    </div>
+    
+    <div>
+        <h3>Create Real Deposit</h3>
+        <input type="text" id="wallet" placeholder="Wallet Address" value="0:15e3117e0ba771cf3e707df72c392eee8ce4a706a8bf174de65aa146257d0837">
+        <input type="number" id="amount" placeholder="Amount (TON)" value="1.0" step="0.1">
+        <button onclick="createDeposit()">Create Deposit</button>
+    </div>
+    
+    <div>
+        <h3>Mock Verify Deposit (Force Success)</h3>
+        <input type="number" id="depositId" placeholder="Deposit ID">
+        <button onclick="mockVerifyDeposit()">Mock Verify (Force Success)</button>
+    </div>
+    
+    <div>
+        <h3>Check User Balance</h3>
+        <input type="number" id="userId" placeholder="User ID" value="1">
+        <button onclick="checkUserBalance()">Check Balance</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function createDeposit() {
+            const wallet = document.getElementById('wallet').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            
+            const data = {
+                user_id: 1,
+                wallet_address: wallet,
+                amount: amount
+            };
+            
+            try {
+                const res = await fetch('/api/deposits/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await res.json();
+                displayResult('Create Deposit', res.status, result);
+                
+                if (res.ok && result.deposit_id) {
+                    document.getElementById('depositId').value = result.deposit_id;
+                }
+            } catch (error) {
+                displayResult('Create Deposit', 'ERROR', { error: error.message });
+            }
+        }
+        
+        async function mockVerifyDeposit() {
+            const depositId = parseInt(document.getElementById('depositId').value);
+            
+            if (!depositId) {
+                alert('Please enter a deposit ID');
+                return;
+            }
+            
+            // Прямое обновление депозита в базе данных минуя проверку блокчейна
+            try {
+                const data = {
+                    deposit_id: depositId,
+                    force_confirm: true, // Специальный флаг для тестирования
+                    mock_tx_hash: `mock_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                };
+                
+                const res = await fetch('/api/deposits/mock-verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await res.json();
+                displayResult('Mock Verify Deposit', res.status, result);
+                
+            } catch (error) {
+                displayResult('Mock Verify Deposit', 'ERROR', { error: error.message });
+            }
+        }
+        
+        async function checkUserBalance() {
+            const userId = parseInt(document.getElementById('userId').value);
+            
+            try {
+                const res = await fetch(`/api/users/${userId}/balance`);
+                const result = await res.json();
+                
+                displayResult('User Balance', res.status, result);
+                
+            } catch (error) {
+                displayResult('User Balance', 'ERROR', { error: error.message });
+            }
+        }
+        
+        function displayResult(action, status, data) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            
+            const isSuccess = status >= 200 && status < 300;
+            resultDiv.className = isSuccess ? 'result success' : 'result error';
+            
+            resultDiv.innerHTML = `
+                <strong>${action}</strong><br>
+                <strong>Status:</strong> ${status}<br>
+                <strong>Response:</strong> <pre>${JSON.stringify(data, null, 2)}</pre>
+                <strong>Time:</strong> ${new Date().toLocaleTimeString()}
+            `;
+            
+            results.insertBefore(resultDiv, results.firstChild);
+        }
+    </script>
+</body>
+</html>

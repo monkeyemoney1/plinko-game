@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TON Transactions Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>TON Transactions Debug</h1>
+    
+    <div>
+        <h3>Test Transactions Endpoints</h3>
+        <input type="text" id="address" placeholder="TON Address" value="UQAgmMyCKFZ1S3VTcsYqiODu1h32n8m5qiWbQODT8bOtDbus">
+        <button onclick="testAllTransactionEndpoints()">Test All Transaction Endpoints</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testAllTransactionEndpoints() {
+            const address = document.getElementById('address').value;
+            const token = 'AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A';
+            
+            // Разные возможные endpoints для транзакций
+            const endpoints = [
+                `https://tonapi.io/v2/blockchain/accounts/${address}/transactions`,
+                `https://tonapi.io/v2/accounts/${address}/transactions`,
+                `https://tonapi.io/v1/blockchain/accounts/${address}/transactions`,
+                `https://toncenter.com/api/v2/getTransactions?address=${address}&limit=10`,
+                `https://testnet.toncenter.com/api/v2/getTransactions?address=${address}&limit=10`
+            ];
+            
+            for (const endpoint of endpoints) {
+                await testEndpoint(endpoint, token, address);
+            }
+        }
+        
+        async function testEndpoint(url, token, address) {
+            try {
+                const headers = {};
+                
+                // TON API использует Bearer token
+                if (url.includes('tonapi.io')) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                    headers['Content-Type'] = 'application/json';
+                }
+                // TonCenter может использовать другой формат
+                else if (url.includes('toncenter.com')) {
+                    // Для toncenter.com не всегда нужен токен
+                }
+                
+                const response = await fetch(url, { headers });
+                
+                let result;
+                try {
+                    result = await response.json();
+                } catch (e) {
+                    result = await response.text();
+                }
+                
+                displayResult(`${url}`, response.status, {
+                    address: address,
+                    response: result,
+                    headers: Object.fromEntries(response.headers.entries())
+                });
+                
+            } catch (error) {
+                displayResult(`${url}`, 'ERROR', { 
+                    address: address,
+                    error: error.message 
+                });
+            }
+        }
+        
+        function displayResult(action, status, data) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            
+            const isSuccess = status >= 200 && status < 300;
+            resultDiv.className = isSuccess ? 'result success' : 'result error';
+            
+            resultDiv.innerHTML = `
+                <strong>${action}</strong><br>
+                <strong>Status:</strong> ${status}<br>
+                <strong>Response:</strong> <pre>${JSON.stringify(data, null, 2)}</pre>
+                <strong>Time:</strong> ${new Date().toLocaleTimeString()}
+            `;
+            
+            results.insertBefore(resultDiv, results.firstChild);
+        }
+    </script>
+</body>
+</html>

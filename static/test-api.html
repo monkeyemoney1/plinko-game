@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>API Test</h1>
+    <div id="results"></div>
+    <script>
+        async function testAPI() {
+            const results = document.getElementById('results');
+            
+            try {
+                // Test game wallet endpoint
+                const walletResponse = await fetch('/api/game/wallet');
+                const walletData = await walletResponse.text();
+                results.innerHTML += `<p>Game Wallet: ${walletResponse.status} - ${walletData}</p>`;
+                
+                // Test balance endpoint (with a dummy address)
+                const balanceResponse = await fetch('/api/wallet/balance?address=UQAV4xF-C6dxzz5wffcsOS7ujOSnBqi_F03mWqFGJX0IN7w7');
+                const balanceData = await balanceResponse.text();
+                results.innerHTML += `<p>Balance: ${balanceResponse.status} - ${balanceData}</p>`;
+                
+            } catch (error) {
+                results.innerHTML += `<p>Error: ${error.message}</p>`;
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

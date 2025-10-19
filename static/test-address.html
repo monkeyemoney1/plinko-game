@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Address Converter</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>TON Address Converter & Tester</h1>
+    
+    <div>
+        <h3>Convert Address Format</h3>
+        <input type="text" id="address" placeholder="TON Address" value="UQAgmMyCKFZ1S3VTcsYqiODu1h32n8m5qiWbQODT8bOtDbus">
+        <button onclick="testBothFormats()">Test Both Formats</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testBothFormats() {
+            const address = document.getElementById('address').value;
+            
+            // Тестируем оригинальный адрес
+            await testAddress(address, 'Original Format');
+            
+            // Пробуем конвертировать в raw формат (упрощенная версия)
+            if (address.startsWith('UQ') || address.startsWith('EQ')) {
+                try {
+                    // Простая попытка конвертации (это не полная реализация)
+                    const base64part = address.substring(2);
+                    // Для полной конвертации нужна библиотека, но попробуем несколько вариантов
+                    
+                    // Попробуем несколько возможных raw форматов
+                    const possibleRawFormats = [
+                        '0:20cc820855754b755372c62a88e0eed61df69fc9b9aa2596084343c1cf6a8f1b3ad0e',
+                        '0:20cc820855754b755372c62a88e0eed61df69fc9b9aa259640e343c1cf6c8f1b3ad0e'
+                    ];
+                    
+                    for (const rawFormat of possibleRawFormats) {
+                        await testAddress(rawFormat, `Raw Format Attempt`);
+                    }
+                    
+                } catch (error) {
+                    displayResult('Address Conversion', 'ERROR', { error: error.message });
+                }
+            }
+        }
+        
+        async function testAddress(address, label) {
+            const url = `https://tonapi.io/v2/accounts/${address}/transactions?limit=5`;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                let result;
+                try {
+                    result = await response.json();
+                } catch (e) {
+                    result = await response.text();
+                }
+                
+                displayResult(`${label} (${address})`, response.status, result);
+                
+            } catch (error) {
+                displayResult(`${label} (${address})`, 'ERROR', { error: error.message });
+            }
+        }
+        
+        function displayResult(action, status, data) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            
+            const isSuccess = status >= 200 && status < 300;
+            resultDiv.className = isSuccess ? 'result' : 'result';
+            resultDiv.style.backgroundColor = isSuccess ? '#d4edda' : '#f8d7da';
+            resultDiv.style.borderColor = isSuccess ? '#c3e6cb' : '#f5c6cb';
+            
+            resultDiv.innerHTML = `
+                <strong>${action}</strong><br>
+                <strong>Status:</strong> ${status}<br>
+                <strong>Response:</strong> <pre>${JSON.stringify(data, null, 2)}</pre>
+                <strong>Time:</strong> ${new Date().toLocaleTimeString()}
+            `;
+            
+            results.insertBefore(resultDiv, results.firstChild);
+        }
+    </script>
+</body>
+</html>

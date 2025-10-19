@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TON API Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>TON API Debug</h1>
+    
+    <div>
+        <h3>Test different addresses</h3>
+        <button onclick="testKnownAddress()">Test Known Working Address</button>
+        <button onclick="testGameWallet()">Test Game Wallet</button>
+        <button onclick="testAPI()">Test API Status</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testKnownAddress() {
+            // Тестируем с известным адресом Telegram Wallet
+            const knownAddress = "UQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N";
+            const url = `https://tonapi.io/v2/accounts/${knownAddress}/transactions?limit=5`;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                displayResult('Known Address Test', response.status, result);
+                
+            } catch (error) {
+                displayResult('Known Address Test', 'ERROR', { error: error.message });
+            }
+        }
+        
+        async function testGameWallet() {
+            // Получаем адрес игрового кошелька и тестируем его
+            try {
+                const walletRes = await fetch('/api/game/wallet');
+                const walletData = await walletRes.json();
+                
+                if (walletRes.ok && walletData.address) {
+                    const gameAddress = walletData.address;
+                    const url = `https://tonapi.io/v2/accounts/${gameAddress}/transactions?limit=5`;
+                    
+                    const response = await fetch(url, {
+                        headers: {
+                            'Authorization': `Bearer AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    displayResult('Game Wallet Test', response.status, { 
+                        address: gameAddress,
+                        apiResponse: result 
+                    });
+                    
+                } else {
+                    displayResult('Game Wallet Test', 'ERROR', { error: 'Could not get game wallet address' });
+                }
+                
+            } catch (error) {
+                displayResult('Game Wallet Test', 'ERROR', { error: error.message });
+            }
+        }
+        
+        async function testAPI() {
+            // Тестируем разные эндпоинты API
+            const endpoints = [
+                'https://tonapi.io/v2/status',
+                'https://tonapi.io/v2/blockchain/accounts/EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c', // Empty account
+                'https://tonapi.io/v1/blockchain/accounts/EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c' // v1 API
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(endpoint, {
+                        headers: {
+                            'Authorization': `Bearer AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A`
+                        }
+                    });
+                    
+                    let result;
+                    try {
+                        result = await response.json();
+                    } catch (e) {
+                        result = await response.text();
+                    }
+                    
+                    displayResult(`API Test: ${endpoint}`, response.status, result);
+                    
+                } catch (error) {
+                    displayResult(`API Test: ${endpoint}`, 'ERROR', { error: error.message });
+                }
+            }
+        }
+        
+        function displayResult(action, status, data) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            
+            const isSuccess = status >= 200 && status < 300;
+            resultDiv.className = isSuccess ? 'result success' : 'result error';
+            
+            resultDiv.innerHTML = `
+                <strong>${action}</strong><br>
+                <strong>Status:</strong> ${status}<br>
+                <strong>Response:</strong> <pre>${JSON.stringify(data, null, 2)}</pre>
+                <strong>Time:</strong> ${new Date().toLocaleTimeString()}
+            `;
+            
+            results.insertBefore(resultDiv, results.firstChild);
+        }
+    </script>
+</body>
+</html>

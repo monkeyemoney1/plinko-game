@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест системы вывода средств</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { background: #f5f5f5; padding: 20px; margin: 10px 0; border-radius: 8px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .result { background: #e9ecef; padding: 15px; margin: 10px 0; border-radius: 4px; white-space: pre-wrap; }
+        .success { border-left: 4px solid #28a745; }
+        .error { border-left: 4px solid #dc3545; }
+        .status-pending { color: #ffc107; font-weight: bold; }
+        .status-completed { color: #28a745; font-weight: bold; }
+        .status-failed { color: #dc3545; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🏧 Тест системы вывода средств TON</h1>
+    
+    <!-- Получение баланса пользователя -->
+    <div class="container">
+        <h3>💰 Проверить баланс пользователя</h3>
+        <input type="number" id="userIdBalance" placeholder="User ID" value="1">
+        <button onclick="checkBalance()">Проверить баланс</button>
+        <div id="balanceResult" class="result"></div>
+    </div>
+
+    <!-- Создание запроса на вывод -->
+    <div class="container">
+        <h3>📤 Создать запрос на вывод</h3>
+        <input type="number" id="userIdWithdraw" placeholder="User ID" value="1">
+        <input type="number" id="withdrawAmount" placeholder="Сумма (TON)" value="0.5" step="0.1">
+        <input type="text" id="withdrawWallet" placeholder="Адрес кошелька" value="UQBvW8Z5huBkMJYdnfAEM5JqTNkuWX3diqYENkWsIL0XggGG">
+        <button onclick="createWithdrawal()">Создать запрос на вывод</button>
+        <div id="withdrawResult" class="result"></div>
+    </div>
+
+    <!-- Обработка вывода -->
+    <div class="container">
+        <h3>⚙️ Обработать вывод</h3>
+        <input type="number" id="processWithdrawalId" placeholder="Withdrawal ID">
+        <button onclick="processWithdrawal()">Обработать вывод</button>
+        <div id="processResult" class="result"></div>
+    </div>
+
+    <!-- Проверка статуса выводов -->
+    <div class="container">
+        <h3>📊 Статус выводов</h3>
+        <input type="number" id="userIdStatus" placeholder="User ID" value="1">
+        <button onclick="checkWithdrawals()">Проверить выводы пользователя</button>
+        <br>
+        <input type="number" id="withdrawalIdStatus" placeholder="Withdrawal ID (опционально)">
+        <button onclick="checkSpecificWithdrawal()">Проверить конкретный вывод</button>
+        <div id="statusResult" class="result"></div>
+    </div>
+
+    <script>
+        async function makeRequest(url, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (data) options.body = JSON.stringify(data);
+                
+                const response = await fetch(url, options);
+                const result = await response.json();
+                
+                return {
+                    status: response.status,
+                    data: result,
+                    timestamp: new Date().toLocaleTimeString()
+                };
+            } catch (error) {
+                return {
+                    status: 'ERROR',
+                    data: { error: error.message },
+                    timestamp: new Date().toLocaleTimeString()
+                };
+            }
+        }
+
+        function displayResult(elementId, result, title = '') {
+            const element = document.getElementById(elementId);
+            const className = result.data.success ? 'success' : 'error';
+            element.className = `result ${className}`;
+            element.textContent = `${title}\nStatus: ${result.status}\nTime: ${result.timestamp}\n\n` + 
+                                 JSON.stringify(result.data, null, 2);
+        }
+
+        async function checkBalance() {
+            const userId = document.getElementById('userIdBalance').value;
+            const result = await makeRequest(`/api/users/${userId}`);
+            displayResult('balanceResult', result, 'Баланс пользователя:');
+        }
+
+        async function createWithdrawal() {
+            const userId = document.getElementById('userIdWithdraw').value;
+            const amount = document.getElementById('withdrawAmount').value;
+            const walletAddress = document.getElementById('withdrawWallet').value;
+            
+            const result = await makeRequest('/api/withdrawals/create', 'POST', {
+                user_id: parseInt(userId),
+                amount: parseFloat(amount),
+                wallet_address: walletAddress
+            });
+            
+            displayResult('withdrawResult', result, 'Создание запроса на вывод:');
+            
+            // Если запрос успешен, автоматически запускаем обработку
+            if (result.data.success && result.data.withdrawal) {
+                document.getElementById('processWithdrawalId').value = result.data.withdrawal.id;
+                setTimeout(() => {
+                    processWithdrawal();
+                }, 1000); // Задержка 1 секунда
+            }
+        }
+
+        async function processWithdrawal() {
+            const withdrawalId = document.getElementById('processWithdrawalId').value;
+            const result = await makeRequest('/api/withdrawals/process', 'POST', {
+                withdrawal_id: parseInt(withdrawalId)
+            });
+            displayResult('processResult', result, 'Обработка вывода:');
+        }
+
+        async function checkWithdrawals() {
+            const userId = document.getElementById('userIdStatus').value;
+            const result = await makeRequest(`/api/withdrawals/status?user_id=${userId}`);
+            displayResult('statusResult', result, 'Выводы пользователя:');
+        }
+
+        async function checkSpecificWithdrawal() {
+            const withdrawalId = document.getElementById('withdrawalIdStatus').value;
+            if (!withdrawalId) {
+                alert('Введите Withdrawal ID');
+                return;
+            }
+            const result = await makeRequest(`/api/withdrawals/status?withdrawal_id=${withdrawalId}`);
+            displayResult('statusResult', result, 'Статус конкретного вывода:');
+        }
+
+        // Автозагрузка данных
+        window.onload = function() {
+            checkBalance();
+        };
+    </script>
+</body>
+</html>
