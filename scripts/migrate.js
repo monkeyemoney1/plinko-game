@@ -22,23 +22,36 @@ async function migrate() {
     await client.connect();
     console.log('✅ Connected to database');
 
-    // Read and execute schema
-    const schemaPath = join(__dirname, '..', 'database', 'schema.sql');
-    const schema = await readFile(schemaPath, 'utf8');
-    
-    console.log('📝 Executing database schema...');
-    await client.query(schema);
-    console.log('✅ Database schema created successfully');
-
-    // Check if tables exist
-    const result = await client.query(`
+    // Check existing tables
+    const existingTables = await client.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public'
       ORDER BY table_name;
     `);
     
-    console.log('📊 Created tables:', result.rows.map(r => r.table_name).join(', '));
+    if (existingTables.rows.length > 0) {
+      console.log('📊 Tables already exist:', existingTables.rows.map(r => r.table_name).join(', '));
+      console.log('✅ Database schema is up to date');
+    } else {
+      // Read and execute schema only if tables don't exist
+      const schemaPath = join(__dirname, '..', 'database', 'schema.sql');
+      const schema = await readFile(schemaPath, 'utf8');
+      
+      console.log('📝 Executing database schema...');
+      await client.query(schema);
+      console.log('✅ Database schema created successfully');
+
+      // Check created tables
+      const result = await client.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        ORDER BY table_name;
+      `);
+      
+      console.log('📊 Created tables:', result.rows.map(r => r.table_name).join(', '));
+    }
     
   } catch (error) {
     console.error('❌ Migration failed:', error);
