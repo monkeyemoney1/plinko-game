@@ -12,6 +12,8 @@ services:
         value: testnet
       - key: TON_API_KEY
         value: AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A
+      - key: TELEGRAM_BOT_TOKEN
+        value: 8401593144:AAHIzxiGfGlZ2GQ8h8Y6y-W_9ZPxqCupGIU
       - key: SESSION_SECRET
         generateValue: true
       - key: PROMETHEUS_ENABLED
