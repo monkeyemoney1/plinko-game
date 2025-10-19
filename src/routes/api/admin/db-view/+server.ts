@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getDb } from '$lib/server/db';
+import { pool } from '$lib/server/db';
 
 // Простой пароль для доступа (измените на свой)
 const ADMIN_PASSWORD = 'admin123';
@@ -14,7 +14,7 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Неверный пароль' }, { status: 401 });
     }
 
-    const db = getDb();
+    const db = pool;
 
     // Если таблица не указана, показываем список всех таблиц
     if (!table) {
