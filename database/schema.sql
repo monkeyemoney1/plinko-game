@@ -77,6 +77,18 @@ CREATE TABLE balance_operations (
     completed_at TIMESTAMP
 );
 
+-- Таблица депозитов
+CREATE TABLE deposits (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    wallet_address VARCHAR(100) NOT NULL,
+    amount DECIMAL(18, 9) NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending', -- pending/confirmed/failed
+    transaction_hash VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    confirmed_at TIMESTAMP
+);
+
 -- Таблица логов событий
 CREATE TABLE event_logs (
     id SERIAL PRIMARY KEY,
@@ -118,6 +130,11 @@ CREATE INDEX idx_ton_transactions_created_at ON ton_transactions(created_at);
 CREATE INDEX idx_balance_operations_user_id ON balance_operations(user_id);
 CREATE INDEX idx_balance_operations_status ON balance_operations(status);
 CREATE INDEX idx_balance_operations_created_at ON balance_operations(created_at);
+
+CREATE INDEX idx_deposits_user_id ON deposits(user_id);
+CREATE INDEX idx_deposits_status ON deposits(status);
+CREATE INDEX idx_deposits_transaction_hash ON deposits(transaction_hash);
+CREATE INDEX idx_deposits_created_at ON deposits(created_at);
 
 CREATE INDEX idx_event_logs_user_id ON event_logs(user_id);
 CREATE INDEX idx_event_logs_event_type ON event_logs(event_type);

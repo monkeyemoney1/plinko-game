@@ -32,6 +32,24 @@ async function migrate() {
     
     if (existingTables.rows.length > 0) {
       console.log('📊 Tables already exist:', existingTables.rows.map(r => r.table_name).join(', '));
+      
+      // Выполняем дополнительные миграции (например, добавление новых таблиц)
+      console.log('📝 Checking for additional migrations...');
+      try {
+        const migrationPath = join(__dirname, '..', 'migrations', '004_add_deposits_table.sql');
+        const migration = await readFile(migrationPath, 'utf8');
+        await client.query(migration);
+        console.log('✅ Additional migrations applied successfully');
+      } catch (migrationError) {
+        if (migrationError.code === '42P07') {
+          console.log('⚠️  Deposits table already exists, skipping');
+        } else if (migrationError.code === 'ENOENT') {
+          console.log('ℹ️  No additional migrations found');
+        } else {
+          console.warn('⚠️  Migration warning:', migrationError.message);
+        }
+      }
+      
       console.log('✅ Database schema is up to date');
     } else {
       // Read and execute schema only if tables don't exist
