@@ -64,10 +64,10 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
       console.log(`Создание тестового пользователя для telegram_id: ${telegram_id}`);
       
       const insertResult = await client.query(`
-        INSERT INTO users (telegram_id, username, ton_balance, stars_balance, balance, created_at)
+        INSERT INTO users (telegram_id, ton_address, telegram_username, ton_balance, stars_balance, created_at)
         VALUES ($1, $2, $3, $4, $5, NOW())
         RETURNING id, telegram_id, stars_balance
-      `, [telegram_id, `user_${telegram_id}`, 0, 0, 100]);
+      `, [telegram_id, `test_address_${telegram_id}`, `test_user_${telegram_id}`, 0, 0]);
       
       user = insertResult.rows[0];
       console.log('Тестовый пользователь создан:', user);
