@@ -34,7 +34,7 @@
 Возвращает адрес игрового кошелька:
 ```json
 {
-  "wallet_address": "UQAAPcRiR3yfX-8TfKKiPHtVBzNmHl6zI6jLNFLz2aBlHLCR"
+  "wallet_address": "UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX"
 }
 ```
 
@@ -68,7 +68,7 @@ TONAPI_KEY=ваш_реальный_ключ_tonapi
 2. Получите его адрес в формате UQ... (48 символов)
 3. Обновите в `.env`:
 ```
-GAME_WALLET_ADDRESS=UQваш_реальный_адрес_кошелька
+GAME_WALLET_ADDRESS=UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX
 ```
 
 ### 3. Безопасность

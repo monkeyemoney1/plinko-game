@@ -5,7 +5,7 @@ import type { RequestHandler } from './$types';
 
 // Получаем переменные окружения динамически
 const TONAPI_KEY = env.TON_API_KEY || '';
-const GAME_WALLET_ADDRESS = env.GAME_WALLET_ADDRESS || 'UQBvPJ_E5tT9rBsRdYhదదේ...';
+const GAME_WALLET_ADDRESS = env.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
 
 // Функция для нормализации адресов TON
 function normalizeAddress(address: string): string[] {

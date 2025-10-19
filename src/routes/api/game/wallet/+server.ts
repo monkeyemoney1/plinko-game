@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async () => {
-  const walletAddress = env.GAME_WALLET_ADDRESS || 'UQAAPcRiR3yfX-8TfKKiPHtVBzNmHl6zI6jLNFLz2aBlHLCR';
+  const walletAddress = env.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
   
   return json({
     success: true,
