@@ -39,10 +39,18 @@ async function migrate() {
       const schema = await readFile(schemaPath, 'utf8');
       
       console.log('📝 Executing database schema...');
-      await client.query(schema);
-      console.log('✅ Database schema created successfully');
+      try {
+        await client.query(schema);
+        console.log('✅ Database schema created successfully');
+      } catch (schemaError) {
+        if (schemaError.code === '42P07') {
+          console.log('⚠️  Tables already exist, skipping creation');
+        } else {
+          throw schemaError;
+        }
+      }
 
-      // Check created tables
+      // Check tables
       const result = await client.query(`
         SELECT table_name 
         FROM information_schema.tables 
@@ -50,12 +58,18 @@ async function migrate() {
         ORDER BY table_name;
       `);
       
-      console.log('📊 Created tables:', result.rows.map(r => r.table_name).join(', '));
+      console.log('📊 Tables in database:', result.rows.map(r => r.table_name).join(', '));
     }
     
   } catch (error) {
-    console.error('❌ Migration failed:', error);
-    process.exit(1);
+    // Если ошибка связана с тем, что таблицы уже существуют - игнорируем
+    if (error.code === '42P07' && error.message.includes('already exists')) {
+      console.log('⚠️  Tables already exist, skipping migration');
+      console.log('📊 Database is ready');
+    } else {
+      console.error('❌ Migration failed:', error);
+      process.exit(1);
+    }
   } finally {
     await client.end();
   }
