@@ -1,10 +1,13 @@
 import { json } from '@sveltejs/kit';
 import { pool } from '$lib/db';
-import { GAME_WALLET_ADDRESS, TONAPI_KEY } from '$env/static/private';
 import { env as privateEnv } from '$env/dynamic/private';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ton = require(process.cwd() + '/server/ton-helper.cjs');
+
+// Получаем переменные окружения динамически
+const GAME_WALLET_ADDRESS = privateEnv.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
+const TONAPI_KEY = privateEnv.TON_API_KEY || '';
 
 export const POST = async ({ request }) => {
   try {
