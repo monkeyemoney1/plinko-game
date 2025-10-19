@@ -303,20 +303,21 @@ class PlinkoEngine {
           });
           if (res.ok) {
             const data = await res.json();
-            const stars = Number(data?.balance?.stars_balance);
-            if (!Number.isNaN(stars)) {
-              // Сервер вернул баланс с учётом полной операции,
-              // но мы уже списали ставку локально, поэтому добавляем её обратно
-              balance.set(stars + this.betAmount);
+            const serverBalance = Number(data?.balance?.stars_balance);
+            if (!Number.isNaN(serverBalance)) {
+              // Используем точный баланс с сервера
+              balance.set(serverBalance);
             } else {
-              // fallback к локальному расчёту, если API не вернул баланс
-              balance.update((b) => b + profit);
+              // fallback - добавляем только выплату
+              balance.update((b) => b + payoutValue);
             }
           } else {
-            balance.update((b) => b + profit);
+            // fallback - добавляем только выплату
+            balance.update((b) => b + payoutValue);
           }
         } else {
-          balance.update((b) => b + profit);
+          // fallback - добавляем только выплату
+          balance.update((b) => b + payoutValue);
         }
       } catch {
         balance.update((b) => b + profit);
