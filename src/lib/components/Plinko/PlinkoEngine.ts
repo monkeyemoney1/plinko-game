@@ -210,7 +210,7 @@ class PlinkoEngine {
     Matter.Composite.add(this.engine.world, ball);
 
     betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-    balance.update((balance) => balance - this.betAmount);
+    // Не списываем ставку локально - это делает сервер при обработке результата
   }
 
   /**
