@@ -34,7 +34,38 @@
     tonConnectUI = new TonConnectUI({
       manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json'
     });
+    
+    // Отслеживаем изменения статуса подключения кошелька
+    tonConnectUI.onStatusChange((walletInfo) => {
+      if (walletInfo && walletInfo.account) {
+        // Кошелек подключен - отслеживаем это в БД
+        trackWalletConnection(walletInfo.account.address);
+      } else {
+        // Кошелек отключен
+        console.log('Кошелек отключен');
+      }
+    });
   });
+  
+  // Функция для отслеживания подключения кошелька
+  async function trackWalletConnection(walletAddress: string) {
+    const userId = localStorage.getItem('user_id');
+    if (!userId) return;
+    
+    try {
+      await fetch('/api/wallet/track-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          user_id: parseInt(userId),
+          wallet_address: walletAddress
+        })
+      });
+      console.log('Подключение кошелька отслежено:', walletAddress);
+    } catch (error) {
+      console.error('Ошибка отслеживания подключения кошелька:', error);
+    }
+  }
   let convertAmount = 0;
   let direction: 'tonToStars' | 'starsToTon' = 'tonToStars';
   let isDepositModalOpen = false;
