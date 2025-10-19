@@ -3,7 +3,7 @@
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
-  import { isTelegramWebApp } from '$lib/telegram/webApp';
+  import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
 
   let tonConnectUI: TonConnectUI;
   
@@ -58,13 +58,35 @@
       return;
     }
     
+    // Получаем telegram_id пользователя из Telegram WebApp или используем userId как fallback
+    let telegramId = null;
+    
+    if (isTelegramWebApp()) {
+      // Получаем данные пользователя из Telegram WebApp
+      try {
+        const telegramUser = getTelegramUser();
+        if (telegramUser?.id) {
+          telegramId = telegramUser.id;
+          console.log('Получен Telegram ID:', telegramId);
+        }
+      } catch (e) {
+        console.warn('Не удалось получить Telegram ID:', e);
+      }
+    }
+    
+    // Fallback: используем userId как telegram_id для тестирования
+    if (!telegramId) {
+      telegramId = parseInt(userId) || 123456789; // Fallback ID для тестирования
+      console.log('Используем fallback Telegram ID:', telegramId);
+    }
+    
     try {
       // Инициируем платеж Stars через новый API
       const res = await fetch('/api/payments/stars/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          user_id: userId, 
+          telegram_id: telegramId,  // Изменено с user_id на telegram_id
           amount: starsDepositAmount,
           description: `Пополнение баланса игры на ${starsDepositAmount} Stars`
         })
@@ -112,10 +134,34 @@
   
   async function verifyStarsPayment(payload: string) {
     try {
+      // Получаем telegram_id аналогично processStarsDeposit
+      let telegramId = null;
+      
+      if (isTelegramWebApp()) {
+        try {
+          const telegramUser = getTelegramUser();
+          if (telegramUser?.id) {
+            telegramId = telegramUser.id;
+          }
+        } catch (e) {
+          console.warn('Не удалось получить Telegram ID при верификации:', e);
+        }
+      }
+      
+      // Fallback
+      if (!telegramId) {
+        const userId = localStorage.getItem('user_id');
+        telegramId = parseInt(userId) || 123456789;
+      }
+      
       const res = await fetch('/api/payments/stars/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload })
+        body: JSON.stringify({ 
+          payload,
+          telegram_id: telegramId,
+          amount: starsDepositAmount // Передаем amount для проверки
+        })
       });
       
       if (res.ok) {

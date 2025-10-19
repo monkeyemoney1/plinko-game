@@ -53,20 +53,27 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
     await client.query('BEGIN');
 
     // 1. Проверяем существование пользователя в нашей базе
-    const userResult = await client.query(
+    let userResult = await client.query(
       'SELECT id, telegram_id, stars_balance FROM users WHERE telegram_id = $1',
       [telegram_id]
     );
 
+    let user;
     if (userResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return json({
-        success: false,
-        error: 'Пользователь не найден. Сначала подключите кошелек в игре.'
-      }, { status: 404 });
+      // Создаем тестового пользователя автоматически
+      console.log(`Создание тестового пользователя для telegram_id: ${telegram_id}`);
+      
+      const insertResult = await client.query(`
+        INSERT INTO users (telegram_id, username, ton_balance, stars_balance, balance, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        RETURNING id, telegram_id, stars_balance
+      `, [telegram_id, `user_${telegram_id}`, 0, 0, 100]);
+      
+      user = insertResult.rows[0];
+      console.log('Тестовый пользователь создан:', user);
+    } else {
+      user = userResult.rows[0];
     }
-
-    const user = userResult.rows[0];
 
     // 2. Проверяем пользователя через Telegram Bot API
     console.log('Проверка пользователя через Bot API...');
