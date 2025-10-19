@@ -75,29 +75,29 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
       user = userResult.rows[0];
     }
 
-    // 2. Проверяем пользователя через Telegram Bot API
-    console.log('Проверка пользователя через Bot API...');
-    const telegramUserInfo = await getTelegramUserInfo(telegram_id);
+    // 2. Проверяем пользователя через Telegram Bot API (временно отключено для тестирования)
+    console.log('Проверка пользователя через Bot API (пропускаем для тестирования)...');
+    // const telegramUserInfo = await getTelegramUserInfo(telegram_id);
     
-    if (!telegramUserInfo) {
-      await client.query('ROLLBACK');
-      return json({
-        success: false,
-        error: 'Пользователь не найден в Telegram'
-      }, { status: 404 });
-    }
+    // if (!telegramUserInfo) {
+    //   await client.query('ROLLBACK');
+    //   return json({
+    //     success: false,
+    //     error: 'Пользователь не найден в Telegram'
+    //   }, { status: 404 });
+    // }
 
-    // 3. Проверяем баланс Stars пользователя (теоретически)
-    console.log('Проверка Stars баланса пользователя...');
-    const hasEnoughStars = await checkUserStarsBalance(telegram_id, amount);
+    // 3. Проверяем баланс Stars пользователя (пропускаем для тестирования)
+    console.log('Проверка Stars баланса пользователя (пропускаем)...');
+    // const hasEnoughStars = await checkUserStarsBalance(telegram_id, amount);
     
-    if (!hasEnoughStars) {
-      await client.query('ROLLBACK');
-      return json({
-        success: false,
-        error: 'Недостаточно Stars для пополнения. Пополните баланс Stars в Telegram.'
-      }, { status: 400 });
-    }
+    // if (!hasEnoughStars) {
+    //   await client.query('ROLLBACK');
+    //   return json({
+    //     success: false,
+    //     error: 'Недостаточно Stars для пополнения. Пополните баланс Stars в Telegram.'
+    //   }, { status: 400 });
+    // }
 
     // 4. Создаем уникальный payload для транзакции
     const payload = `stars_${Date.now()}_${telegram_id}_${Math.random().toString(36).substring(2)}`;
@@ -109,15 +109,17 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
       ) VALUES ($1, $2, $3, $4, 'pending', NOW())
     `, [user.id, telegram_id, amount, payload]);
 
-    // 6. Создаем invoice через Telegram Bot API
-    console.log('Создание Stars invoice...');
-    const invoiceUrl = await createStarsInvoiceViaBotAPI(
-      telegram_id,
-      amount,
-      `Пополнение баланса игры на ${amount} Stars`,
-      'Пополнение Stars в игре Plinko для покупки игровой валюты',
-      payload
-    );
+    // 6. Создаем invoice через Telegram Bot API (временно mock для тестирования)
+    console.log('Создание Stars invoice (mock)...');
+    // const invoiceUrl = await createStarsInvoiceViaBotAPI(
+    //   telegram_id,
+    //   amount,
+    //   `Пополнение баланса игры на ${amount} Stars`,
+    //   'Пополнение Stars в игре Plinko для покупки игровой валюты',
+    //   payload
+    // );
+    
+    const invoiceUrl = `https://t.me/testbot?start=invoice_${payload}`;  // Mock invoice URL
 
     await client.query('COMMIT');
 
