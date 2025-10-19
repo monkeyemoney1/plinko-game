@@ -210,7 +210,8 @@ class PlinkoEngine {
     Matter.Composite.add(this.engine.world, ball);
 
     betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-    // Не списываем ставку локально - это делает сервер при обработке результата
+    // Списываем ставку локально для мгновенного отображения
+    balance.update((balance) => balance - this.betAmount);
   }
 
   /**
@@ -304,7 +305,9 @@ class PlinkoEngine {
             const data = await res.json();
             const stars = Number(data?.balance?.stars_balance);
             if (!Number.isNaN(stars)) {
-              balance.set(stars);
+              // Сервер вернул баланс с учётом полной операции,
+              // но мы уже списали ставку локально, поэтому добавляем её обратно
+              balance.set(stars + this.betAmount);
             } else {
               // fallback к локальному расчёту, если API не вернул баланс
               balance.update((b) => b + profit);
