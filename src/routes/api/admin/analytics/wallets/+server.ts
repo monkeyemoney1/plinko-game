@@ -38,8 +38,9 @@ export const GET: RequestHandler = async () => {
       SELECT 
         uw.id,
         uw.user_id,
-        COALESCE(u.wallet_address, 'N/A') as username,
+        COALESCE(u.telegram_username, 'User_' || u.id) as username,
         u.telegram_id,
+        u.ton_address,
         uw.wallet_address,
         uw.is_connected,
         uw.created_at as registration_date
