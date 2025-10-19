@@ -1,9 +1,7 @@
 {
+  "url": "https://plinko-game-9hku.onrender.com",
   "name": "Plinko Game",
-  "description": "Demo casino game with TON Connect integration.",
-  "url": "https://greeboolya.github.io/Plinkogame/",
-  "iconUrl": "https://greeboolya.github.io/Plinkogame/logo.png",
-  "termsUrl": "https://greeboolya.github.io/Plinkogame/terms.html",
-  "privacyUrl": "https://greeboolya.github.io/Plinkogame/privacy.html",
-  "redirectUrl": "https://greeboolya.github.io/Plinkogame/profile"
+  "iconUrl": "https://plinko-game-9hku.onrender.com/android-chrome-192x192.png",
+  "termsOfUseUrl": "https://plinko-game-9hku.onrender.com/terms",
+  "privacyPolicyUrl": "https://plinko-game-9hku.onrender.com/privacy"
 }
