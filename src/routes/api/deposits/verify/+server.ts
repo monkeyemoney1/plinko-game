@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import { pool } from '$lib/server/db';
-import { TONAPI_KEY, GAME_WALLET_ADDRESS } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
+
+// Получаем переменные окружения динамически
+const TONAPI_KEY = env.TON_API_KEY || '';
+const GAME_WALLET_ADDRESS = env.GAME_WALLET_ADDRESS || 'UQBvPJ_E5tT9rBsRdYhదదේ...';
 
 // Функция для нормализации адресов TON
 function normalizeAddress(address: string): string[] {
