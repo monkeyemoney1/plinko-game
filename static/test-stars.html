@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест Telegram Stars - Plinko Game</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background: #333;
+            color: #fff;
+        }
+        button {
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .result {
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .error {
+            background: #d32f2f;
+        }
+        .success {
+            background: #388e3c;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌟 Тест Telegram Stars Integration</h1>
+    
+    <div class="container">
+        <h2>📱 Telegram WebApp Info</h2>
+        <div id="telegram-info">Загрузка...</div>
+    </div>
+
+    <div class="container">
+        <h2>💰 Создание Stars Invoice</h2>
+        <input type="number" id="stars-amount" placeholder="Количество Stars" value="10" min="1">
+        <input type="text" id="stars-description" placeholder="Описание платежа" value="Тест пополнения баланса">
+        <br>
+        <button onclick="createStarsInvoice()">Создать инвойс</button>
+        <div id="invoice-result" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>✅ Проверка платежа</h2>
+        <input type="text" id="payload-input" placeholder="Payload для проверки">
+        <br>
+        <button onclick="verifyPayment()">Проверить платеж</button>
+        <div id="verify-result" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>🔗 Быстрые действия</h2>
+        <button onclick="testFullFlow()">Полный тест (создать + оплатить)</button>
+        <button onclick="checkBalance()">Проверить баланс Stars</button>
+        <div id="action-result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tgUser = null;
+        
+        function initTelegram() {
+            const info = document.getElementById('telegram-info');
+            
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+                
+                tgUser = tg.initDataUnsafe?.user;
+                
+                info.innerHTML = `
+                    <strong>Platform:</strong> ${tg.platform}<br>
+                    <strong>Version:</strong> ${tg.version}<br>
+                    <strong>User ID:</strong> ${tgUser?.id || 'Не доступен'}<br>
+                    <strong>Username:</strong> ${tgUser?.username || 'Не указан'}<br>
+                    <strong>First Name:</strong> ${tgUser?.first_name || 'Не указан'}<br>
+                    <strong>Is Premium:</strong> ${tgUser?.is_premium ? 'Да' : 'Нет'}<br>
+                    <strong>Init Data:</strong> ${tg.initData ? 'Доступен' : 'Недоступен'}
+                `;
+            } else {
+                info.innerHTML = `
+                    <span style="color: #ff6b6b;">⚠️ Telegram WebApp API недоступен</span><br>
+                    Откройте эту страницу через Telegram бота для полного функционала.
+                `;
+            }
+        }
+
+        async function createStarsInvoice() {
+            const amount = document.getElementById('stars-amount').value;
+            const description = document.getElementById('stars-description').value;
+            const resultDiv = document.getElementById('invoice-result');
+            
+            if (!amount || amount < 1) {
+                showResult(resultDiv, 'Укажите корректное количество Stars', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/payments/stars/initiate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: tgUser?.id || 12345678, // Тестовый ID если Telegram недоступен
+                        amount: parseInt(amount),
+                        description: description
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(resultDiv, 
+                        `✅ Инвойс создан успешно!\n\n` +
+                        `💰 Сумма: ${data.amount} Stars\n` +
+                        `🔗 Ссылка: ${data.invoice_link}\n` +
+                        `📋 Payload: ${data.payload}\n\n` +
+                        `Нажмите на ссылку для оплаты:`,
+                        'success'
+                    );
+                    
+                    // Добавляем кликабельную ссылку
+                    const linkButton = document.createElement('button');
+                    linkButton.textContent = 'Открыть инвойс';
+                    linkButton.onclick = () => {
+                        if (window.Telegram?.WebApp?.openInvoice) {
+                            window.Telegram.WebApp.openInvoice(data.invoice_link, (status) => {
+                                showResult(resultDiv, `Статус платежа: ${status}`, 
+                                    status === 'paid' ? 'success' : 'error');
+                                
+                                if (status === 'paid') {
+                                    document.getElementById('payload-input').value = data.payload;
+                                }
+                            });
+                        } else {
+                            window.open(data.invoice_link, '_blank');
+                        }
+                    };
+                    
+                    resultDiv.appendChild(document.createElement('br'));
+                    resultDiv.appendChild(linkButton);
+                    
+                    // Автоматически заполняем payload для проверки
+                    document.getElementById('payload-input').value = data.payload;
+                    
+                } else {
+                    showResult(resultDiv, `❌ Ошибка: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, `❌ Ошибка сети: ${error.message}`, 'error');
+            }
+        }
+
+        async function verifyPayment() {
+            const payload = document.getElementById('payload-input').value;
+            const resultDiv = document.getElementById('verify-result');
+            
+            if (!payload) {
+                showResult(resultDiv, 'Введите payload для проверки', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/payments/stars/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ payload })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.success) {
+                        showResult(resultDiv, 
+                            `✅ Платеж подтвержден!\n\n` +
+                            `💰 Сумма: ${data.amount} Stars\n` +
+                            `👤 User ID: ${data.user_id}\n` +
+                            `📅 Дата: ${new Date(data.created_at).toLocaleString()}\n` +
+                            `🆔 Transaction ID: ${data.transaction_id}`,
+                            'success'
+                        );
+                    } else {
+                        showResult(resultDiv, '❌ Платеж не найден или не подтвержден', 'error');
+                    }
+                } else {
+                    showResult(resultDiv, `❌ Ошибка: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, `❌ Ошибка сети: ${error.message}`, 'error');
+            }
+        }
+
+        async function testFullFlow() {
+            const resultDiv = document.getElementById('action-result');
+            showResult(resultDiv, '🚀 Запуск полного теста...', 'success');
+            
+            // Создаем инвойс
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await createStarsInvoice();
+            
+            showResult(resultDiv, 
+                '✅ Тест завершен!\n\n' +
+                '1. Инвойс создан ✓\n' +
+                '2. Проверьте результат выше\n' +
+                '3. Оплатите инвойс\n' +
+                '4. Используйте "Проверить платеж" для верификации',
+                'success'
+            );
+        }
+
+        async function checkBalance() {
+            const resultDiv = document.getElementById('action-result');
+            const userId = tgUser?.id || 12345678;
+            
+            try {
+                const response = await fetch(`/api/users/${userId}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(resultDiv, 
+                        `💰 Баланс пользователя ${userId}:\n\n` +
+                        `⭐️ Stars: ${data.user?.stars_balance || 0}\n` +
+                        `💎 TON: ${data.user?.ton_balance || 0}\n` +
+                        `🎮 Game Balance: ${data.user?.balance || 0}`,
+                        'success'
+                    );
+                } else {
+                    showResult(resultDiv, `❌ Ошибка загрузки баланса: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, `❌ Ошибка сети: ${error.message}`, 'error');
+            }
+        }
+
+        function showResult(element, text, type = '') {
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.textContent = text;
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', initTelegram);
+    </script>
+</body>
+</html>

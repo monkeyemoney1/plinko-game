@@ -1,12 +1,20 @@
 <script lang="ts">
   import ogImage from '$lib/assets/og_image.jpg';
   import type { Snippet } from 'svelte';
+  import { onMount } from 'svelte';
+  import { initTelegramWebApp, isTelegramWebApp } from '$lib/telegram/webApp';
   import '../app.css';
 
   let { children }: { children: Snippet } = $props();
 
-  // Проверка авторизации
-  if (typeof window !== 'undefined') {
+  onMount(() => {
+    // Инициализация Telegram WebApp
+    if (isTelegramWebApp()) {
+      initTelegramWebApp();
+      console.log('Telegram WebApp инициализировано');
+    }
+
+    // Проверка авторизации
     const isAuth = localStorage.getItem('plinko_is_auth');
     const currentPath = window.location.pathname;
     // Если не авторизован, не пускать никуда кроме /auth
@@ -17,8 +25,7 @@
     if (isAuth && currentPath === '/auth') {
       window.location.replace('/profile');
     }
-    // Если авторизован, разрешить любые другие страницы
-  }
+  });
 
   function handleLogout() {
     localStorage.removeItem('plinko_is_auth');

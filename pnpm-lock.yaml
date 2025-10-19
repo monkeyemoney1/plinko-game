@@ -26,6 +26,9 @@ importers:
       '@tonconnect/ui':
         specifier: ^2.3.1
         version: 2.3.1
+      '@twa-dev/sdk':
+        specifier: ^8.0.2
+        version: 8.0.2(react@19.2.0)
       bits-ui:
         specifier: ^1.2.0
         version: 1.2.0(svelte@5.16.1)
@@ -660,6 +663,14 @@ packages:
 
   '@tonconnect/ui@2.3.1':
     resolution: {integrity: sha512-G1hKn5TrqFYztbR94EG8YuhGUpp7wY8PjC1Fu7/d8rFg7XnPGlUcGmuqH8+2lYrb9Ms0M7v6+5U6S4q4+yCQtQ==}
+
+  '@twa-dev/sdk@8.0.2':
+    resolution: {integrity: sha512-Pp5GxnxP2blboVZFiM9aWjs4cb8IpW3x2jP3kLOMvIqy0jzNUTuFHkwHtx+zEvh/UcF2F+wmS8G6ebIA0XPXcg==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
+
+  '@twa-dev/types@8.0.2':
+    resolution: {integrity: sha512-ICQ6n4NaUPPzV3/GzflVQS6Nnu5QX2vr9OlOG8ZkFf3rSJXzRKazrLAbZlVhCPPWkIW3MMuELPsE6tByrA49qA==}
 
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
@@ -1777,6 +1788,10 @@ packages:
   react-is@18.2.0:
     resolution: {integrity: sha512-xWGDIW6x921xtzPkhiULtthJHoJvBbF3q26fzloPCK0hsvxtPVelvftw3zjbHWSkR2km9Z+4uxbDDK/6Zw9B8w==}
 
+  react@19.2.0:
+    resolution: {integrity: sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ==}
+    engines: {node: '>=0.10.0'}
+
   readdirp@4.0.2:
     resolution: {integrity: sha512-yDMz9g+VaZkqBYS/ozoBJwaBhTbZo3UNYQHNRw1D3UFQB8oHB4uS/tAODO+ZLjGWmUbKnIlOWO+aaIiAxrUWHA==}
     engines: {node: '>= 14.16.0'}
@@ -2608,6 +2623,13 @@ snapshots:
       ua-parser-js: 1.0.41
     transitivePeerDependencies:
       - encoding
+
+  '@twa-dev/sdk@8.0.2(react@19.2.0)':
+    dependencies:
+      '@twa-dev/types': 8.0.2
+      react: 19.2.0
+
+  '@twa-dev/types@8.0.2': {}
 
   '@types/cookie@0.6.0': {}
 
@@ -3650,6 +3672,8 @@ snapshots:
   queue-microtask@1.2.3: {}
 
   react-is@18.2.0: {}
+
+  react@19.2.0: {}
 
   readdirp@4.0.2: {}
 

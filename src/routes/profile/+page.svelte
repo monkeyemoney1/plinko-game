@@ -3,6 +3,7 @@
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
+  import { isTelegramWebApp } from '$lib/telegram/webApp';
 
   let tonConnectUI: TonConnectUI;
   
@@ -56,23 +57,83 @@
       alert('Укажите сумму для пополнения');
       return;
     }
+    
     try {
-      const res = await fetch('/api/deposits/stars', {
+      // Инициируем платеж Stars через новый API
+      const res = await fetch('/api/payments/stars/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: starsDepositAmount })
+        body: JSON.stringify({ 
+          user_id: userId, 
+          amount: starsDepositAmount,
+          description: `Пополнение баланса игры на ${starsDepositAmount} Stars`
+        })
       });
+      
       if (res.ok) {
-        alert('Пополнение Stars успешно!');
-        starsDepositAmount = 0;
-        closeStarsDepositModal();
-        loadBalance();
+        const data = await res.json();
+        
+        // Используем Telegram WebApp API для создания инвойса
+        if (window.Telegram?.WebApp?.openInvoice) {
+          // Открываем инвойс в Telegram
+          window.Telegram.WebApp.openInvoice(data.invoice_link, (status) => {
+            if (status === 'paid') {
+              // Верификация платежа
+              verifyStarsPayment(data.payload);
+            } else if (status === 'cancelled') {
+              alert('Платеж был отменен');
+            } else if (status === 'failed') {
+              alert('Ошибка при оплате');
+            }
+          });
+          
+          // Закрываем модалку, так как пользователь перешел к оплате
+          starsDepositAmount = 0;
+          closeStarsDepositModal();
+        } else {
+          // Fallback: показываем ссылку для оплаты
+          if (confirm(`Создан инвойс на ${starsDepositAmount} Stars. Открыть ссылку для оплаты?`)) {
+            window.open(data.invoice_link, '_blank');
+            // В этом случае нужно будет проверять статус платежа вручную
+            setTimeout(() => verifyStarsPayment(data.payload), 5000);
+          }
+          starsDepositAmount = 0;
+          closeStarsDepositModal();
+        }
       } else {
         const error = await res.json();
-        alert('Ошибка пополнения: ' + (error.error || 'Неизвестная ошибка'));
+        alert('Ошибка создания инвойса: ' + (error.error || 'Неизвестная ошибка'));
       }
     } catch (e) {
+      console.error('Stars deposit error:', e);
       alert('Ошибка: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+  
+  async function verifyStarsPayment(payload: string) {
+    try {
+      const res = await fetch('/api/payments/stars/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          alert(`Платеж подтвержден! Баланс пополнен на ${data.amount} Stars`);
+          loadBalance();
+        } else {
+          alert('Платеж не подтвержден. Попробуйте позже.');
+        }
+      } else {
+        const error = await res.json();
+        console.error('Verification error:', error);
+        alert('Ошибка верификации платежа: ' + (error.error || 'Неизвестная ошибка'));
+      }
+    } catch (e) {
+      console.error('Verification error:', e);
+      alert('Ошибка верификации: ' + (e instanceof Error ? e.message : String(e)));
     }
   }
   function handleDeposit() {

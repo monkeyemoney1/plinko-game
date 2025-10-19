@@ -15,7 +15,7 @@ async function migrate() {
   
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: false  // Отключаем SSL для локальной базы данных
   });
 
   try {
@@ -35,18 +35,36 @@ async function migrate() {
       
       // Выполняем дополнительные миграции (например, добавление новых таблиц)
       console.log('📝 Checking for additional migrations...');
+      
+      // Миграция deposits table
       try {
         const migrationPath = join(__dirname, '..', 'migrations', '004_add_deposits_table.sql');
         const migration = await readFile(migrationPath, 'utf8');
         await client.query(migration);
-        console.log('✅ Additional migrations applied successfully');
+        console.log('✅ Deposits migration applied successfully');
       } catch (migrationError) {
         if (migrationError.code === '42P07') {
           console.log('⚠️  Deposits table already exists, skipping');
         } else if (migrationError.code === 'ENOENT') {
-          console.log('ℹ️  No additional migrations found');
+          console.log('ℹ️  Deposits migration not found');
         } else {
-          console.warn('⚠️  Migration warning:', migrationError.message);
+          console.warn('⚠️  Deposits migration warning:', migrationError.message);
+        }
+      }
+      
+      // Миграция star_transactions table
+      try {
+        const starMigrationPath = join(__dirname, '..', 'migrations', '005_add_star_transactions.sql');
+        const starMigration = await readFile(starMigrationPath, 'utf8');
+        await client.query(starMigration);
+        console.log('✅ Stars transactions migration applied successfully');
+      } catch (migrationError) {
+        if (migrationError.code === '42P07') {
+          console.log('⚠️  Stars transactions table already exists, skipping');
+        } else if (migrationError.code === 'ENOENT') {
+          console.log('ℹ️  Stars migration not found');
+        } else {
+          console.warn('⚠️  Stars migration warning:', migrationError.message);
         }
       }
       
