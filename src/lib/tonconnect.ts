@@ -5,7 +5,7 @@ let tonConnectUI: TonConnectUI | null = null;
 
 if (browser) {
     tonConnectUI = new TonConnectUI({
-        manifestUrl: 'https://greeboolya.github.io/Plinkogame/.well-known/tonconnect-manifest.json',
+        manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json',
         // Отключаем автовосстановление и Android back handler для стабильности
         restoreConnection: false,
         enableAndroidBackHandler: false

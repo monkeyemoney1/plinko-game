@@ -31,7 +31,7 @@
     
     // Инициализируем TON Connect UI
     tonConnectUI = new TonConnectUI({
-      manifestUrl: 'https://greeboolya.github.io/Plinkogame/.well-known/tonconnect-manifest.json'
+      manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json'
     });
   });
   let convertAmount = 0;

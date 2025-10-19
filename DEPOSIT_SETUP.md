@@ -80,7 +80,7 @@ GAME_WALLET_ADDRESS=UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX
 
 ### 4. Манифест TON Connect
 Манифест уже опубликован на GitHub Pages:
-https://greeboolya.github.io/Plinkogame/.well-known/tonconnect-manifest.json
+https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json
 
 ## Как тестировать
 
