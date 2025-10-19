@@ -8,7 +8,7 @@ export const GET: RequestHandler = async () => {
     const query = `
       SELECT 
         st.*,
-        u.username
+        COALESCE(u.wallet_address, 'User_' || u.id) as username
       FROM star_transactions st
       JOIN users u ON st.user_id = u.id
       ORDER BY st.created_at DESC

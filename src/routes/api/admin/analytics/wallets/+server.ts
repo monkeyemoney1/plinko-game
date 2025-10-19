@@ -38,7 +38,7 @@ export const GET: RequestHandler = async () => {
       SELECT 
         uw.id,
         uw.user_id,
-        u.username,
+        COALESCE(u.wallet_address, 'N/A') as username,
         u.telegram_id,
         uw.wallet_address,
         uw.is_connected,
