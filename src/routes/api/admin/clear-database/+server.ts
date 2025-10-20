@@ -15,64 +15,62 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     // ПОЛНАЯ ОЧИСТКА ВСЕХ ТАБЛИЦ - удаляем абсолютно все данные
-    await db.query('BEGIN');
+    const cleared: Record<string, boolean> = {};
+    const errors: string[] = [];
 
-    try {
-      // Очищаем игровые данные
-      await db.query('TRUNCATE TABLE game_bets RESTART IDENTITY CASCADE');
-      
-      // Очищаем транзакции
-      await db.query('TRUNCATE TABLE transactions RESTART IDENTITY CASCADE');
-      
-      // Очищаем депозиты
-      await db.query('TRUNCATE TABLE deposits RESTART IDENTITY CASCADE');
-      await db.query('TRUNCATE TABLE pending_deposits RESTART IDENTITY CASCADE');
-      
-      // Очищаем транзакции звёзд
-      await db.query('TRUNCATE TABLE star_transactions RESTART IDENTITY CASCADE');
-      
-      // Очищаем кошельки
-      await db.query('TRUNCATE TABLE user_wallets RESTART IDENTITY CASCADE');
-      
-      // Очищаем withdrawals (выводы средств)
-      await db.query('TRUNCATE TABLE withdrawals RESTART IDENTITY CASCADE');
-      
-      // Очищаем blockchain транзакции
-      await db.query('TRUNCATE TABLE blockchain_transactions RESTART IDENTITY CASCADE');
-      
-      // Очищаем сессии
-      await db.query('TRUNCATE TABLE sessions RESTART IDENTITY CASCADE');
-      
-      // УДАЛЯЕМ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ - полный вайп
-      await db.query('TRUNCATE TABLE users RESTART IDENTITY CASCADE');
+    // Список таблиц для очистки в правильном порядке (учитывая зависимости)
+    const tablesToClear = [
+      'game_bets',
+      'transactions', 
+      'deposits',
+      'pending_deposits',
+      'star_transactions',
+      'user_wallets',
+      'withdrawals',
+      'blockchain_transactions',
+      'sessions',
+      'users' // Пользователи в конце, чтобы избежать проблем с внешними ключами
+    ];
 
-      await db.query('COMMIT');
+    console.log('Начинаем очистку базы данных...');
 
-      return json({ 
-        success: true, 
-        message: 'База данных полностью очищена! Все пользователи и данные удалены.',
-        cleared: {
-          users: true,
-          game_bets: true,
-          transactions: true,
-          deposits: true,
-          pending_deposits: true,
-          star_transactions: true,
-          user_wallets: true,
-          withdrawals: true,
-          blockchain_transactions: true,
-          sessions: true
+    for (const table of tablesToClear) {
+      try {
+        await db.query(`TRUNCATE TABLE ${table} RESTART IDENTITY CASCADE`);
+        cleared[table] = true;
+        console.log(`✓ Таблица ${table} очищена`);
+      } catch (error) {
+        // Если таблица не существует или есть другая ошибка - пропускаем
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.warn(`⚠ Не удалось очистить таблицу ${table}: ${errorMessage}`);
+        cleared[table] = false;
+        errors.push(`${table}: ${errorMessage}`);
+        
+        // Проверяем, не является ли это критической ошибкой
+        if (!errorMessage.includes('does not exist') && !errorMessage.includes('не существует')) {
+          // Критическая ошибка - прерываем
+          throw error;
         }
-      });
-    } catch (error) {
-      await db.query('ROLLBACK');
-      throw error;
+      }
     }
+
+    const successCount = Object.values(cleared).filter(v => v === true).length;
+    const totalCount = tablesToClear.length;
+
+    console.log(`Очистка завершена: ${successCount}/${totalCount} таблиц`);
+
+    return json({ 
+      success: true, 
+      message: `База данных очищена! Очищено ${successCount} из ${totalCount} таблиц.`,
+      cleared,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
   } catch (error) {
-    console.error('Ошибка очистки базы данных:', error);
+    console.error('Критическая ошибка очистки базы данных:', error);
     return json({ 
       success: false, 
-      error: 'Ошибка при очистке базы данных',
+      error: 'Критическая ошибка при очистке базы данных',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }

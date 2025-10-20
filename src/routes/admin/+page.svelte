@@ -264,7 +264,14 @@
       const data = await response.json();
       
       if (response.ok && data.success) {
-        clearSuccess = 'База данных полностью очищена! Все пользователи и данные удалены. Проект чистый!';
+        let message = data.message || 'База данных полностью очищена!';
+        
+        // Если есть предупреждения о не очищенных таблицах
+        if (data.errors && data.errors.length > 0) {
+          message += '\n\nПредупреждения:\n' + data.errors.join('\n');
+        }
+        
+        clearSuccess = message;
         
         // Сбрасываем все локальные данные - полный сброс
         stats = {
@@ -1974,6 +1981,8 @@
     border-radius: 8px;
     margin-bottom: 1rem;
     border: 1px solid #c3e6cb;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
   
   .modal-actions {
