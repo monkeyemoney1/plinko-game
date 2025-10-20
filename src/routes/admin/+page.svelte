@@ -225,6 +225,89 @@
     }
   }
   
+  // Очистка базы данных
+  let showClearConfirm = false;
+  let clearConfirmationCode = '';
+  let clearError = '';
+  let clearSuccess = '';
+  
+  function openClearConfirmation() {
+    showClearConfirm = true;
+    clearConfirmationCode = '';
+    clearError = '';
+    clearSuccess = '';
+  }
+  
+  function closeClearConfirmation() {
+    showClearConfirm = false;
+    clearConfirmationCode = '';
+    clearError = '';
+    clearSuccess = '';
+  }
+  
+  async function clearDatabase() {
+    if (!clearConfirmationCode) {
+      clearError = 'Введите код подтверждения';
+      return;
+    }
+    
+    try {
+      loading = true;
+      clearError = '';
+      
+      const response = await fetch('/api/admin/clear-database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmationCode: clearConfirmationCode })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        clearSuccess = 'База данных успешно очищена!';
+        
+        // Сбрасываем все локальные данные
+        stats = {
+          totalUsers: 0,
+          telegramUsers: 0,
+          connectedWallets: 0,
+          totalStarsVolume: 0,
+          totalGames: 0,
+          totalBets: 0
+        };
+        users = [];
+        walletRegistrations = [];
+        starTransactions = [];
+        transactions = [];
+        gameStats = {
+          totalGames: 0,
+          totalBets: 0,
+          totalPayouts: 0,
+          houseEdge: 0,
+          averageBet: 0,
+          biggestWin: 0
+        };
+        recentGames = [];
+        dbTables = [];
+        tableData = null;
+        
+        // Перезагружаем статистику
+        await loadStats();
+        
+        setTimeout(() => {
+          closeClearConfirmation();
+        }, 2000);
+      } else {
+        clearError = data.error || 'Ошибка при очистке базы данных';
+      }
+    } catch (error) {
+      console.error('Ошибка очистки БД:', error);
+      clearError = 'Ошибка подключения к серверу';
+    } finally {
+      loading = false;
+    }
+  }
+  
   function switchTab(tab: typeof activeTab) {
     activeTab = tab;
     
@@ -600,6 +683,9 @@
       {#if activeTab === 'database'}
         <div class="section-header">
           <h2>Управление базой данных</h2>
+          <button class="danger-btn" on:click={openClearConfirmation}>
+            🗑️ Очистить базу данных
+          </button>
         </div>
         
         {#if loading}
@@ -971,6 +1057,66 @@
                 <span class="info-value">{formatDate(selectedWallet.registration_date)}</span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Модальное окно подтверждения очистки БД -->
+  {#if showClearConfirm}
+    <div class="modal-overlay" on:click={closeClearConfirmation}>
+      <div class="modal-content clear-confirm-modal" on:click|stopPropagation>
+        <div class="modal-header">
+          <h2>⚠️ Подтверждение очистки базы данных</h2>
+          <button class="modal-close" on:click={closeClearConfirmation}>✕</button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="warning-box">
+            <p><strong>ВНИМАНИЕ!</strong> Эта операция удалит ВСЕ данные из следующих таблиц:</p>
+            <ul>
+              <li>Игровые ставки (game_bets)</li>
+              <li>Транзакции (transactions)</li>
+              <li>Депозиты (deposits, pending_deposits)</li>
+              <li>Транзакции звёзд (star_transactions)</li>
+              <li>Кошельки (user_wallets)</li>
+              <li>Балансы пользователей (сброс на 0)</li>
+            </ul>
+            <p><strong>Это действие необратимо!</strong></p>
+          </div>
+          
+          <div class="form-group">
+            <label for="clearCode">Введите код подтверждения:</label>
+            <input 
+              type="text" 
+              id="clearCode"
+              bind:value={clearConfirmationCode}
+              placeholder="CLEAR_ALL_DATA_2282211"
+              class="input-field"
+            />
+            <small>Код: <code>CLEAR_ALL_DATA_2282211</code></small>
+          </div>
+          
+          {#if clearError}
+            <div class="error-message">{clearError}</div>
+          {/if}
+          
+          {#if clearSuccess}
+            <div class="success-message">{clearSuccess}</div>
+          {/if}
+          
+          <div class="modal-actions">
+            <button class="btn-secondary" on:click={closeClearConfirmation} disabled={loading}>
+              Отмена
+            </button>
+            <button 
+              class="btn-danger" 
+              on:click={clearDatabase}
+              disabled={loading || !clearConfirmationCode}
+            >
+              {loading ? 'Очистка...' : '🗑️ Очистить базу данных'}
+            </button>
           </div>
         </div>
       </div>
@@ -1700,5 +1846,175 @@
     th, td {
       padding: 0.6rem;
     }
+  }
+  
+  /* Кнопка очистки БД */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .danger-btn {
+    padding: 0.8rem 1.5rem;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .danger-btn:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+  }
+  
+  .danger-btn:active {
+    transform: translateY(0);
+  }
+  
+  /* Модальное окно очистки */
+  .clear-confirm-modal {
+    max-width: 600px;
+  }
+  
+  .warning-box {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .warning-box p {
+    margin: 0.5rem 0;
+    color: #856404;
+  }
+  
+  .warning-box ul {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+    color: #856404;
+  }
+  
+  .warning-box li {
+    margin: 0.5rem 0;
+  }
+  
+  .warning-box strong {
+    color: #dc3545;
+  }
+  
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .input-field {
+    width: 100%;
+    padding: 0.8rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s;
+  }
+  
+  .input-field:focus {
+    outline: none;
+    border-color: #667eea;
+  }
+  
+  .form-group small {
+    display: block;
+    margin-top: 0.5rem;
+    color: #666;
+  }
+  
+  .form-group code {
+    background: #f5f5f5;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #667eea;
+  }
+  
+  .error-message {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #f5c6cb;
+  }
+  
+  .success-message {
+    background: #d4edda;
+    color: #155724;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #c3e6cb;
+  }
+  
+  .modal-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+  }
+  
+  .btn-secondary {
+    padding: 0.8rem 1.5rem;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+  
+  .btn-secondary:hover {
+    background: #5a6268;
+  }
+  
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .btn-danger {
+    padding: 0.8rem 1.5rem;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+  
+  .btn-danger:hover:not(:disabled) {
+    background: #c82333;
+  }
+  
+  .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>

@@ -1,0 +1,72 @@
+import { json } from '@sveltejs/kit';
+import { db } from '$lib/db';
+import type { RequestHandler } from '@sveltejs/kit';
+
+export const POST: RequestHandler = async ({ request }) => {
+  try {
+    const { confirmationCode } = await request.json();
+    
+    // Проверяем код подтверждения для безопасности
+    if (confirmationCode !== 'CLEAR_ALL_DATA_2282211') {
+      return json({ 
+        success: false, 
+        error: 'Неверный код подтверждения' 
+      }, { status: 403 });
+    }
+
+    // Очищаем все таблицы с данными (кроме структурных)
+    await db.query('BEGIN');
+
+    try {
+      // Очищаем игровые данные
+      await db.query('TRUNCATE TABLE game_bets RESTART IDENTITY CASCADE');
+      
+      // Очищаем транзакции
+      await db.query('TRUNCATE TABLE transactions RESTART IDENTITY CASCADE');
+      
+      // Очищаем депозиты
+      await db.query('TRUNCATE TABLE deposits RESTART IDENTITY CASCADE');
+      await db.query('TRUNCATE TABLE pending_deposits RESTART IDENTITY CASCADE');
+      
+      // Очищаем транзакции звёзд
+      await db.query('TRUNCATE TABLE star_transactions RESTART IDENTITY CASCADE');
+      
+      // Очищаем кошельки
+      await db.query('TRUNCATE TABLE user_wallets RESTART IDENTITY CASCADE');
+      
+      // Сбрасываем балансы пользователей
+      await db.query(`
+        UPDATE users 
+        SET stars_balance = 0, 
+            ton_balance = 0,
+            updated_at = NOW()
+      `);
+
+      await db.query('COMMIT');
+
+      return json({ 
+        success: true, 
+        message: 'База данных успешно очищена',
+        cleared: {
+          game_bets: true,
+          transactions: true,
+          deposits: true,
+          pending_deposits: true,
+          star_transactions: true,
+          user_wallets: true,
+          user_balances: true
+        }
+      });
+    } catch (error) {
+      await db.query('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Ошибка очистки базы данных:', error);
+    return json({ 
+      success: false, 
+      error: 'Ошибка при очистке базы данных',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+};
