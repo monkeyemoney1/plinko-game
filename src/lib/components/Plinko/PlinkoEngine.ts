@@ -187,7 +187,7 @@ class PlinkoEngine {
   /**
    * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
-  async dropBall() {
+  async dropBall(): Promise<boolean> {
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;
@@ -238,20 +238,46 @@ class PlinkoEngine {
           }
           if (!Number.isNaN(serverBalance)) {
             balance.set(serverBalance);
+            return true;
           } else {
-            balance.update((b) => b - this.betAmount);
+            // некорректный ответ сервера — отменяем бросок
+            Matter.Composite.remove(this.engine.world, ball);
+            betAmountOfExistingBalls.update((value) => {
+              const newValue = { ...value };
+              delete newValue[ball.id];
+              return newValue;
+            });
+            return false;
           }
         } else {
-          // В случае ошибки сервера не блокируем UX, списываем локально
-          balance.update((b) => b - this.betAmount);
+          // Ошибка сервера — отменяем бросок
+          Matter.Composite.remove(this.engine.world, ball);
+          betAmountOfExistingBalls.update((value) => {
+            const newValue = { ...value };
+            delete newValue[ball.id];
+            return newValue;
+          });
+          return false;
         }
       } else {
-        // Нет userId — только локально
-        balance.update((b) => b - this.betAmount);
+        // Нет userId — отменяем бросок
+        Matter.Composite.remove(this.engine.world, ball);
+        betAmountOfExistingBalls.update((value) => {
+          const newValue = { ...value };
+          delete newValue[ball.id];
+          return newValue;
+        });
+        return false;
       }
     } catch {
-      // На случай сетевой ошибки показываем локальное списание
-      balance.update((b) => b - this.betAmount);
+      // Сетевая ошибка — отменяем бросок
+      Matter.Composite.remove(this.engine.world, ball);
+      betAmountOfExistingBalls.update((value) => {
+        const newValue = { ...value };
+        delete newValue[ball.id];
+        return newValue;
+      });
+      return false;
     }
   }
 
