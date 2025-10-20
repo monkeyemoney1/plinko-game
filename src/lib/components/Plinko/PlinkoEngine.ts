@@ -48,6 +48,12 @@ class PlinkoEngine {
   private runner: Matter.Runner;
 
   /**
+   * Флаг активен ли движок (рендер и физика запущены). Нужен, чтобы
+   * не позволять бросать шарики, когда игра не активна или страница покинута.
+   */
+  private isRunning = false;
+
+  /**
    * Every pin of the game.
    */
   private pins: Matter.Body[] = [];
@@ -169,6 +175,7 @@ class PlinkoEngine {
   start() {
     Matter.Render.run(this.render); // Renders the scene to canvas
     Matter.Runner.run(this.runner, this.engine); // Starts the simulation in physics engine
+    this.isRunning = true;
   }
 
   /**
@@ -177,12 +184,19 @@ class PlinkoEngine {
   stop() {
     Matter.Render.stop(this.render);
     Matter.Runner.stop(this.runner);
+    this.isRunning = false;
+    // Удаляем все шары и очищаем связанные записи ставок
+    this.removeAllBalls();
   }
 
   /**
    * Drops a new ball from the top with a random horizontal offset, and reserves the bet on server.
    */
   async dropBall() {
+    // Если движок не активен (например, пользователь ушёл со страницы), запрещаем бросок
+    if (!this.isRunning) {
+      throw new Error('Engine is not running');
+    }
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;

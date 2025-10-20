@@ -19,7 +19,8 @@
   import type { FormEventHandler } from 'svelte/elements';
   import { twMerge } from 'tailwind-merge';
   import { tonConnectUI } from '$lib/tonconnect';
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate } from '$app/navigation';
+  import { onDestroy } from 'svelte';
 
   let betMode: BetMode = $state(BetMode.MANUAL);
 
@@ -37,6 +38,24 @@
   let autoBetsLeft: number | null = $state(null);
 
   let autoBetInterval: ReturnType<typeof setInterval> | null = $state(null);
+
+  // Очищаем таймер при уничтожении компонента (навигация/перезагрузка)
+  onDestroy(() => {
+    resetAutoBetInterval();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', resetAutoBetInterval);
+    }
+  });
+
+  // Дополнительная защита: очищаем таймер перед навигацией
+  beforeNavigate(() => {
+    resetAutoBetInterval();
+  });
+
+  // Очищаем таймер при закрытии/обновлении страницы
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', resetAutoBetInterval);
+  }
 
   let isBetAmountNegative = $derived($betAmount < 0);
   let isBetExceedBalance = $derived($betAmount > $balance);
@@ -65,26 +84,44 @@
     }
   }
 
-  function autoBetDropBall() {
+  async function autoBetDropBall() {
     if (isBetExceedBalance) {
       resetAutoBetInterval();
       return;
     }
 
-    // Infinite mode
-    if (autoBetsLeft === null) {
-      $plinkoEngine?.dropBall();
+    // Проверяем, что движок ещё существует
+    if (!$plinkoEngine) {
+      resetAutoBetInterval();
       return;
     }
 
-    // Finite mode
-    if (autoBetsLeft > 0) {
-      $plinkoEngine?.dropBall();
-      autoBetsLeft -= 1;
-    }
-    if (autoBetsLeft === 0 && autoBetInterval !== null) {
+    // Не допускаем одновременных бросков поверх активных шаров (исключаем гонки/накладки)
+    if (hasOutstandingBalls) {
+      // Подождём следующий тик, но если шары не расходятся — остановим цикл
       resetAutoBetInterval();
       return;
+    }
+
+    try {
+      // Infinite mode
+      if (autoBetsLeft === null) {
+        await $plinkoEngine.dropBall();
+        return;
+      }
+
+      // Finite mode
+      if (autoBetsLeft > 0) {
+        await $plinkoEngine.dropBall();
+        autoBetsLeft -= 1;
+      }
+      if (autoBetsLeft === 0 && autoBetInterval !== null) {
+        resetAutoBetInterval();
+        return;
+      }
+    } catch (error) {
+      console.error('Auto bet failed:', error);
+      resetAutoBetInterval();
     }
   }
 
@@ -99,8 +136,20 @@
   };
 
   function handleBetClick() {
+    // Проверяем, что движок доступен
+    if (!$plinkoEngine) {
+      console.warn('Plinko engine не инициализирован');
+      return;
+    }
+
+    // Если есть незавершённые мячи/ставки, запрещаем старт нового цикла автобета
+    if (betMode === BetMode.AUTO && hasOutstandingBalls) {
+      console.warn('Нельзя запустить авто-ставку при незавершённых бросках');
+      return;
+    }
+
     if (betMode === BetMode.MANUAL) {
-      $plinkoEngine?.dropBall();
+      $plinkoEngine.dropBall();
     } else if (autoBetInterval === null) {
       autoBetsLeft = autoBetInput === 0 ? null : autoBetInput;
       autoBetInterval = setInterval(autoBetDropBall, autoBetIntervalMs);
