@@ -10,22 +10,14 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
-    'process.env.NODE_ENV': '"production"'
   },
   optimizeDeps: {
-    include: ['buffer', '@ton/core', '@ton/crypto', '@ton/ton'],
-    exclude: ['svelte'],
-    esbuildOptions: {
-      define: {
-        global: 'globalThis'
-      }
-    }
+    include: ['buffer'],
+    exclude: ['svelte']
   },
   resolve: {
     alias: {
-      buffer: 'buffer/',
-      stream: 'stream-browserify',
-      util: 'util/'
+      buffer: 'buffer'
     }
   },
   ssr: {
@@ -36,12 +28,12 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: false, // Keep console for debugging
+        drop_console: true, // Remove console.log in production
         drop_debugger: true,
         dead_code: true
       },
       mangle: {
-        toplevel: false // Disable top-level mangling to prevent issues
+        toplevel: true
       }
     },
     rollupOptions: {
@@ -59,7 +51,7 @@ export default defineConfig({
     },
     // Performance settings
     chunkSizeWarningLimit: 1000,
-    sourcemap: true, // Enable sourcemaps for debugging
+    sourcemap: false, // Disable sourcemaps in production for smaller builds
     reportCompressedSize: false // Speed up build process
   },
   // Development optimizations
