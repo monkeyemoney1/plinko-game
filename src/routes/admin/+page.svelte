@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { User, StarTransaction } from '$lib/types';
-  import { normalizeAddressClient } from '$lib/ton-utils';
   
   // Состояние аутентификации
   let isAuthenticated = false;
@@ -129,22 +128,12 @@
       
       const usersResponse = await fetch('/api/admin/analytics/users');
       if (usersResponse.ok) {
-        const rawUsers = await usersResponse.json();
-        // Нормализуем адреса в UQ формат
-        users = await Promise.all(rawUsers.map(async (user: UserAnalytics) => ({
-          ...user,
-          wallet_address: user.wallet_address ? await normalizeAddressClient(user.wallet_address) : null
-        })));
+        users = await usersResponse.json();
       }
       
       const walletsResponse = await fetch('/api/admin/analytics/wallets');
       if (walletsResponse.ok) {
-        const rawWallets = await walletsResponse.json();
-        // Нормализуем адреса в UQ формат
-        walletRegistrations = await Promise.all(rawWallets.map(async (wallet: WalletRegistration) => ({
-          ...wallet,
-          wallet_address: await normalizeAddressClient(wallet.wallet_address)
-        })));
+        walletRegistrations = await walletsResponse.json();
       }
       
       const starsResponse = await fetch('/api/admin/analytics/stars');
@@ -194,24 +183,6 @@
       const data = await response.json();
       if (response.ok) {
         tableData = data;
-        
-        // Нормализуем адреса кошельков, если они есть в таблице
-        if (tableData?.data && Array.isArray(tableData.data)) {
-          tableData.data = await Promise.all(tableData.data.map(async (row: any) => {
-            const normalizedRow = { ...row };
-            
-            // Проверяем все поля на наличие TON адресов
-            for (const [key, value] of Object.entries(row)) {
-              if (typeof value === 'string' && 
-                  (key.includes('address') || key.includes('wallet') || key === 'ton_address') &&
-                  value.startsWith('0:')) {
-                normalizedRow[key] = await normalizeAddressClient(value);
-              }
-            }
-            
-            return normalizedRow;
-          }));
-        }
       }
     } catch (error) {
       console.error('Ошибка загрузки таблицы:', error);
@@ -254,97 +225,6 @@
     }
   }
   
-  // Очистка базы данных
-  let showClearConfirm = false;
-  let clearConfirmationCode = '';
-  let clearError = '';
-  let clearSuccess = '';
-  
-  function openClearConfirmation() {
-    showClearConfirm = true;
-    clearConfirmationCode = '';
-    clearError = '';
-    clearSuccess = '';
-  }
-  
-  function closeClearConfirmation() {
-    showClearConfirm = false;
-    clearConfirmationCode = '';
-    clearError = '';
-    clearSuccess = '';
-  }
-  
-  async function clearDatabase() {
-    if (!clearConfirmationCode) {
-      clearError = 'Введите код подтверждения';
-      return;
-    }
-    
-    try {
-      loading = true;
-      clearError = '';
-      
-      const response = await fetch('/api/admin/clear-database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirmationCode: clearConfirmationCode })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        let message = data.message || 'База данных полностью очищена!';
-        
-        // Если есть предупреждения о не очищенных таблицах
-        if (data.errors && data.errors.length > 0) {
-          message += '\n\nПредупреждения:\n' + data.errors.join('\n');
-        }
-        
-        clearSuccess = message;
-        
-        // Сбрасываем все локальные данные - полный сброс
-        stats = {
-          totalUsers: 0,
-          telegramUsers: 0,
-          connectedWallets: 0,
-          totalStarsVolume: 0,
-          totalGames: 0,
-          totalBets: 0
-        };
-        users = [];
-        walletRegistrations = [];
-        starTransactions = [];
-        transactions = [];
-        gameStats = {
-          totalGames: 0,
-          totalBets: 0,
-          totalPayouts: 0,
-          houseEdge: 0,
-          averageBet: 0,
-          biggestWin: 0
-        };
-        recentGames = [];
-        dbTables = [];
-        tableData = null;
-        selectedTable = '';
-        
-        // Перезагружаем статистику (должна показать 0 везде)
-        await loadStats();
-        
-        setTimeout(() => {
-          closeClearConfirmation();
-        }, 3000);
-      } else {
-        clearError = data.error || 'Ошибка при очистке базы данных';
-      }
-    } catch (error) {
-      console.error('Ошибка очистки БД:', error);
-      clearError = 'Ошибка подключения к серверу';
-    } finally {
-      loading = false;
-    }
-  }
-  
   function switchTab(tab: typeof activeTab) {
     activeTab = tab;
     
@@ -372,22 +252,6 @@
       await navigator.clipboard.writeText(text);
     } catch (error) {
       console.error('Ошибка копирования:', error);
-    }
-  }
-  
-  // Форматирование адреса в user-friendly формат (UQ)
-  async function formatAddress(address: string | null | undefined): Promise<string> {
-    if (!address) return 'N/A';
-    try {
-      // Если адрес уже в формате UQ, возвращаем как есть
-      if (address.startsWith('UQ') || address.startsWith('EQ')) {
-        return address;
-      }
-      // Конвертируем raw адрес в UQ формат
-      return await normalizeAddressClient(address);
-    } catch (e) {
-      console.error('Error formatting address:', e);
-      return address;
     }
   }
   
@@ -736,9 +600,6 @@
       {#if activeTab === 'database'}
         <div class="section-header">
           <h2>Управление базой данных</h2>
-          <button class="danger-btn" on:click={openClearConfirmation}>
-            🗑️ Очистить базу данных
-          </button>
         </div>
         
         {#if loading}
@@ -1110,70 +971,6 @@
                 <span class="info-value">{formatDate(selectedWallet.registration_date)}</span>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-  
-  <!-- Модальное окно подтверждения очистки БД -->
-  {#if showClearConfirm}
-    <div class="modal-overlay" on:click={closeClearConfirmation}>
-      <div class="modal-content clear-confirm-modal" on:click|stopPropagation>
-        <div class="modal-header">
-          <h2>⚠️ Подтверждение очистки базы данных</h2>
-          <button class="modal-close" on:click={closeClearConfirmation}>✕</button>
-        </div>
-        
-        <div class="modal-body">
-          <div class="warning-box">
-            <p><strong>ВНИМАНИЕ!</strong> Эта операция удалит АБСОЛЮТНО ВСЕ данные из базы данных:</p>
-            <ul>
-              <li><strong>Пользователи (users)</strong> - все аккаунты будут удалены</li>
-              <li>Игровые ставки (game_bets)</li>
-              <li>Транзакции (transactions)</li>
-              <li>Депозиты (deposits, pending_deposits)</li>
-              <li>Транзакции звёзд (star_transactions)</li>
-              <li>Кошельки (user_wallets)</li>
-              <li>Выводы средств (withdrawals)</li>
-              <li>Blockchain транзакции (blockchain_transactions)</li>
-              <li>Сессии (sessions)</li>
-            </ul>
-            <p><strong>⚠️ ПОЛНЫЙ ВАЙП ПРОЕКТА! Это действие необратимо!</strong></p>
-            <p style="color: #dc3545; font-weight: bold;">После очистки в базе НЕ ОСТАНЕТСЯ НИ ОДНОГО ПОЛЬЗОВАТЕЛЯ!</p>
-          </div>
-          
-          <div class="form-group">
-            <label for="clearCode">Введите код подтверждения:</label>
-            <input 
-              type="text" 
-              id="clearCode"
-              bind:value={clearConfirmationCode}
-              placeholder="CLEAR_ALL_DATA_2282211"
-              class="input-field"
-            />
-            <small>Код: <code>CLEAR_ALL_DATA_2282211</code></small>
-          </div>
-          
-          {#if clearError}
-            <div class="error-message">{clearError}</div>
-          {/if}
-          
-          {#if clearSuccess}
-            <div class="success-message">{clearSuccess}</div>
-          {/if}
-          
-          <div class="modal-actions">
-            <button class="btn-secondary" on:click={closeClearConfirmation} disabled={loading}>
-              Отмена
-            </button>
-            <button 
-              class="btn-danger" 
-              on:click={clearDatabase}
-              disabled={loading || !clearConfirmationCode}
-            >
-              {loading ? 'Очистка...' : '🗑️ Очистить базу данных'}
-            </button>
           </div>
         </div>
       </div>
@@ -1903,177 +1700,5 @@
     th, td {
       padding: 0.6rem;
     }
-  }
-  
-  /* Кнопка очистки БД */
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-  
-  .danger-btn {
-    padding: 0.8rem 1.5rem;
-    background: #dc3545;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .danger-btn:hover {
-    background: #c82333;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
-  }
-  
-  .danger-btn:active {
-    transform: translateY(0);
-  }
-  
-  /* Модальное окно очистки */
-  .clear-confirm-modal {
-    max-width: 600px;
-  }
-  
-  .warning-box {
-    background: #fff3cd;
-    border: 2px solid #ffc107;
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-  
-  .warning-box p {
-    margin: 0.5rem 0;
-    color: #856404;
-  }
-  
-  .warning-box ul {
-    margin: 1rem 0;
-    padding-left: 1.5rem;
-    color: #856404;
-  }
-  
-  .warning-box li {
-    margin: 0.5rem 0;
-  }
-  
-  .warning-box strong {
-    color: #dc3545;
-  }
-  
-  .form-group {
-    margin-bottom: 1.5rem;
-  }
-  
-  .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #333;
-  }
-  
-  .input-field {
-    width: 100%;
-    padding: 0.8rem;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 1rem;
-    transition: border-color 0.3s;
-  }
-  
-  .input-field:focus {
-    outline: none;
-    border-color: #667eea;
-  }
-  
-  .form-group small {
-    display: block;
-    margin-top: 0.5rem;
-    color: #666;
-  }
-  
-  .form-group code {
-    background: #f5f5f5;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    font-family: monospace;
-    color: #667eea;
-  }
-  
-  .error-message {
-    background: #f8d7da;
-    color: #721c24;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    border: 1px solid #f5c6cb;
-  }
-  
-  .success-message {
-    background: #d4edda;
-    color: #155724;
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-    border: 1px solid #c3e6cb;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-  
-  .modal-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    margin-top: 1.5rem;
-  }
-  
-  .btn-secondary {
-    padding: 0.8rem 1.5rem;
-    background: #6c757d;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-  }
-  
-  .btn-secondary:hover {
-    background: #5a6268;
-  }
-  
-  .btn-secondary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
-  .btn-danger {
-    padding: 0.8rem 1.5rem;
-    background: #dc3545;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-  }
-  
-  .btn-danger:hover:not(:disabled) {
-    background: #c82333;
-  }
-  
-  .btn-danger:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

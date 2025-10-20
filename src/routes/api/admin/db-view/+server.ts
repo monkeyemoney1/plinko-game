@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { pool } from '$lib/server/db';
 
-// Пароль администратора
-const ADMIN_PASSWORD = '2282211q';
+// Простой пароль для доступа (измените на свой)
+const ADMIN_PASSWORD = 'admin123';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {

@@ -11,8 +11,8 @@ export const GET: RequestHandler = async () => {
         (SELECT COUNT(*) FROM users WHERE telegram_id IS NOT NULL) as telegram_users,
         (SELECT COUNT(*) FROM user_wallets WHERE is_connected = true) as connected_wallets,
         (SELECT COALESCE(SUM(amount), 0) FROM star_transactions WHERE status = 'completed') as total_stars_volume,
-        (SELECT COUNT(*) FROM game_bets) as total_games,
-        (SELECT COALESCE(SUM(bet_amount), 0) FROM game_bets) as total_bets
+        (SELECT COUNT(*) FROM game_results) as total_games,
+        (SELECT COALESCE(SUM(bet_amount), 0) FROM game_results) as total_bets
     `;
     
     const result = await db.query(statsQuery);

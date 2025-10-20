@@ -2,17 +2,9 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import type { RequestHandler } from '@sveltejs/kit';
 
-// Пароль администратора
-const ADMIN_PASSWORD = '2282211q';
-
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { query, password } = await request.json();
-    
-    // Проверка пароля
-    if (password !== ADMIN_PASSWORD) {
-      return json({ error: 'Неверный пароль' }, { status: 401 });
-    }
+    const { query } = await request.json();
     
     if (!query) {
       return json({ error: 'SQL запрос обязателен' }, { status: 400 });
