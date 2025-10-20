@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { User, StarTransaction } from '$lib/types';
+  import { normalizeAddressClient } from '$lib/ton-utils';
   
   // Состояние аутентификации
   let isAuthenticated = false;
@@ -128,12 +129,22 @@
       
       const usersResponse = await fetch('/api/admin/analytics/users');
       if (usersResponse.ok) {
-        users = await usersResponse.json();
+        const rawUsers = await usersResponse.json();
+        // Нормализуем адреса в UQ формат
+        users = await Promise.all(rawUsers.map(async (user: UserAnalytics) => ({
+          ...user,
+          wallet_address: user.wallet_address ? await normalizeAddressClient(user.wallet_address) : null
+        })));
       }
       
       const walletsResponse = await fetch('/api/admin/analytics/wallets');
       if (walletsResponse.ok) {
-        walletRegistrations = await walletsResponse.json();
+        const rawWallets = await walletsResponse.json();
+        // Нормализуем адреса в UQ формат
+        walletRegistrations = await Promise.all(rawWallets.map(async (wallet: WalletRegistration) => ({
+          ...wallet,
+          wallet_address: await normalizeAddressClient(wallet.wallet_address)
+        })));
       }
       
       const starsResponse = await fetch('/api/admin/analytics/stars');
@@ -183,6 +194,24 @@
       const data = await response.json();
       if (response.ok) {
         tableData = data;
+        
+        // Нормализуем адреса кошельков, если они есть в таблице
+        if (tableData?.data && Array.isArray(tableData.data)) {
+          tableData.data = await Promise.all(tableData.data.map(async (row: any) => {
+            const normalizedRow = { ...row };
+            
+            // Проверяем все поля на наличие TON адресов
+            for (const [key, value] of Object.entries(row)) {
+              if (typeof value === 'string' && 
+                  (key.includes('address') || key.includes('wallet') || key === 'ton_address') &&
+                  value.startsWith('0:')) {
+                normalizedRow[key] = await normalizeAddressClient(value);
+              }
+            }
+            
+            return normalizedRow;
+          }));
+        }
       }
     } catch (error) {
       console.error('Ошибка загрузки таблицы:', error);
@@ -343,6 +372,22 @@
       await navigator.clipboard.writeText(text);
     } catch (error) {
       console.error('Ошибка копирования:', error);
+    }
+  }
+  
+  // Форматирование адреса в user-friendly формат (UQ)
+  async function formatAddress(address: string | null | undefined): Promise<string> {
+    if (!address) return 'N/A';
+    try {
+      // Если адрес уже в формате UQ, возвращаем как есть
+      if (address.startsWith('UQ') || address.startsWith('EQ')) {
+        return address;
+      }
+      // Конвертируем raw адрес в UQ формат
+      return await normalizeAddressClient(address);
+    } catch (e) {
+      console.error('Error formatting address:', e);
+      return address;
     }
   }
   
