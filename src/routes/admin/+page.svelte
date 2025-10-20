@@ -67,6 +67,13 @@
   
   let loading = false;
   
+  // Модальное окно с детальными данными пользователя
+  let selectedUser: UserAnalytics | null = null;
+  let selectedWallet: WalletRegistration | null = null;
+  let isUserModalOpen = false;
+  let isWalletModalOpen = false;
+  let userDetailedData: any = null;
+  
   // Проверка пароля в localStorage
   onMount(() => {
     const savedAuth = localStorage.getItem('admin_auth');
@@ -84,7 +91,7 @@
     }
     
     // Простая проверка пароля (можно заменить на серверную проверку)
-    const ADMIN_PASSWORD = 'admin123'; // Измените на свой пароль!
+    const ADMIN_PASSWORD = '2282211q'; // Пароль администратора
     
     if (password === ADMIN_PASSWORD) {
       isAuthenticated = true;
@@ -269,6 +276,49 @@
     if (transactionsFilter === 'stars') return t.type === 'stars';
     return true;
   });
+  
+  // Функции для модальных окон
+  async function openUserModal(user: UserAnalytics) {
+    selectedUser = user;
+    isUserModalOpen = true;
+    
+    // Загружаем дополнительные данные пользователя
+    try {
+      loading = true;
+      const [gamesRes, transactionsRes] = await Promise.all([
+        fetch(`/api/users/${user.id}/games`),
+        fetch(`/api/users/${user.id}/transactions`)
+      ]);
+      
+      const games = gamesRes.ok ? await gamesRes.json() : [];
+      const userTransactions = transactionsRes.ok ? await transactionsRes.json() : [];
+      
+      userDetailedData = {
+        games,
+        transactions: userTransactions
+      };
+    } catch (error) {
+      console.error('Ошибка загрузки данных пользователя:', error);
+    } finally {
+      loading = false;
+    }
+  }
+  
+  function closeUserModal() {
+    isUserModalOpen = false;
+    selectedUser = null;
+    userDetailedData = null;
+  }
+  
+  function openWalletModal(wallet: WalletRegistration) {
+    selectedWallet = wallet;
+    isWalletModalOpen = true;
+  }
+  
+  function closeWalletModal() {
+    isWalletModalOpen = false;
+    selectedWallet = null;
+  }
 </script>
 
 <svelte:head>
@@ -418,21 +468,32 @@
                     <th>ID</th>
                     <th>Username</th>
                     <th>Telegram ID</th>
+                    <th>Адрес кошелька</th>
                     <th>Баланс</th>
                     <th>Stars баланс</th>
                     <th>Stars потрачено</th>
                     <th>Регистрация</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   {#each filteredUsers as user}
-                    <tr>
+                    <tr class="clickable-row" on:click={() => openUserModal(user)}>
                       <td>{user.id}</td>
                       <td>{user.username || 'N/A'}</td>
                       <td>
                         {#if user.telegram_id}
-                          <button class="copy-btn" on:click={() => copyToClipboard(user.telegram_id)}>
+                          <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(user.telegram_id)}>
                             {user.telegram_id}
+                          </button>
+                        {:else}
+                          N/A
+                        {/if}
+                      </td>
+                      <td>
+                        {#if user.wallet_address}
+                          <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(user.wallet_address)}>
+                            {user.wallet_address}
                           </button>
                         {:else}
                           N/A
@@ -442,6 +503,11 @@
                       <td>{user.stars_balance || 0}</td>
                       <td>{user.total_stars_spent || 0}</td>
                       <td>{formatDate(user.created_at)}</td>
+                      <td>
+                        <button class="detail-btn" on:click|stopPropagation={() => openUserModal(user)}>
+                          📊 Подробнее
+                        </button>
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -457,19 +523,20 @@
                   <tr>
                     <th>ID</th>
                     <th>Username</th>
-                    <th>Адрес кошелька</th>
+                    <th>Адрес кошелька (UQ формат, 48 символов)</th>
                     <th>Статус</th>
                     <th>Дата регистрации</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   {#each filteredWallets as wallet}
-                    <tr>
+                    <tr class="clickable-row" on:click={() => openWalletModal(wallet)}>
                       <td>{wallet.id}</td>
                       <td>{wallet.username || 'N/A'}</td>
                       <td>
-                        <button class="copy-btn wallet-addr" on:click={() => copyToClipboard(wallet.wallet_address)}>
-                          {wallet.wallet_address.slice(0, 12)}...{wallet.wallet_address.slice(-8)}
+                        <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(wallet.wallet_address)}>
+                          {wallet.wallet_address}
                         </button>
                       </td>
                       <td>
@@ -478,6 +545,11 @@
                         </span>
                       </td>
                       <td>{formatDate(wallet.registration_date)}</td>
+                      <td>
+                        <button class="detail-btn" on:click|stopPropagation={() => openWalletModal(wallet)}>
+                          📊 Подробнее
+                        </button>
+                      </td>
                     </tr>
                   {/each}
                 </tbody>
@@ -707,6 +779,203 @@
       
     </div>
   </div>
+  
+  <!-- Модальное окно с детальными данными пользователя -->
+  {#if isUserModalOpen && selectedUser}
+    <div class="modal-overlay" on:click={closeUserModal}>
+      <div class="modal-content" on:click|stopPropagation>
+        <div class="modal-header">
+          <h2>📊 Детальная информация о пользователе</h2>
+          <button class="modal-close" on:click={closeUserModal}>✕</button>
+        </div>
+        
+        <div class="modal-body">
+          <!-- Основная информация -->
+          <div class="info-section">
+            <h3>Основная информация</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">ID:</span>
+                <span class="info-value">{selectedUser.id}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Username:</span>
+                <span class="info-value">{selectedUser.username || 'N/A'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Telegram ID:</span>
+                <span class="info-value copyable" on:click={() => copyToClipboard(selectedUser.telegram_id || '')}>
+                  {selectedUser.telegram_id || 'N/A'}
+                </span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Адрес кошелька:</span>
+                <span class="info-value copyable" on:click={() => copyToClipboard(selectedUser.wallet_address || '')}>
+                  {selectedUser.wallet_address || 'N/A'}
+                </span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Баланс:</span>
+                <span class="info-value">{selectedUser.balance}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Stars баланс:</span>
+                <span class="info-value">{selectedUser.stars_balance || 0}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Stars потрачено:</span>
+                <span class="info-value">{selectedUser.total_stars_spent || 0}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Stars получено:</span>
+                <span class="info-value">{selectedUser.total_stars_received || 0}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Регистрация:</span>
+                <span class="info-value">{formatDate(selectedUser.created_at)}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Последняя активность:</span>
+                <span class="info-value">{selectedUser.last_activity ? formatDate(selectedUser.last_activity) : 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Игры пользователя -->
+          {#if userDetailedData?.games}
+            <div class="info-section">
+              <h3>Последние игры ({userDetailedData.games.length})</h3>
+              {#if userDetailedData.games.length > 0}
+                <div class="mini-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Ставка</th>
+                        <th>Множитель</th>
+                        <th>Выигрыш</th>
+                        <th>Время</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each userDetailedData.games.slice(0, 10) as game}
+                        <tr>
+                          <td>{game.id}</td>
+                          <td>{formatNumber(game.bet_amount)}</td>
+                          <td>x{formatNumber(game.multiplier)}</td>
+                          <td class="{game.payout > game.bet_amount ? 'positive' : 'negative'}">
+                            {formatNumber(game.payout)}
+                          </td>
+                          <td>{formatDate(game.created_at)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {:else}
+                <p class="no-data">Нет данных об играх</p>
+              {/if}
+            </div>
+          {/if}
+          
+          <!-- Транзакции пользователя -->
+          {#if userDetailedData?.transactions}
+            <div class="info-section">
+              <h3>Последние транзакции ({userDetailedData.transactions.length})</h3>
+              {#if userDetailedData.transactions.length > 0}
+                <div class="mini-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Тип</th>
+                        <th>Сумма</th>
+                        <th>Статус</th>
+                        <th>Время</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each userDetailedData.transactions.slice(0, 10) as transaction}
+                        <tr>
+                          <td>{transaction.id}</td>
+                          <td>{transaction.type}</td>
+                          <td>{transaction.amount}</td>
+                          <td>
+                            <span class="status {transaction.status}">
+                              {transaction.status}
+                            </span>
+                          </td>
+                          <td>{formatDate(transaction.created_at)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {:else}
+                <p class="no-data">Нет транзакций</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+  
+  <!-- Модальное окно для кошелька -->
+  {#if isWalletModalOpen && selectedWallet}
+    <div class="modal-overlay" on:click={closeWalletModal}>
+      <div class="modal-content" on:click|stopPropagation>
+        <div class="modal-header">
+          <h2>💼 Информация о кошельке</h2>
+          <button class="modal-close" on:click={closeWalletModal}>✕</button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="info-section">
+            <h3>Детали кошелька</h3>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">ID записи:</span>
+                <span class="info-value">{selectedWallet.id}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">User ID:</span>
+                <span class="info-value">{selectedWallet.user_id}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Username:</span>
+                <span class="info-value">{selectedWallet.username || 'N/A'}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Telegram ID:</span>
+                <span class="info-value copyable" on:click={() => copyToClipboard(selectedWallet.telegram_id)}>
+                  {selectedWallet.telegram_id}
+                </span>
+              </div>
+              <div class="info-item full-width">
+                <span class="info-label">Адрес кошелька (UQ формат):</span>
+                <span class="info-value copyable" on:click={() => copyToClipboard(selectedWallet.wallet_address)}>
+                  {selectedWallet.wallet_address}
+                </span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Статус:</span>
+                <span class="info-value">
+                  <span class="status {selectedWallet.is_connected ? 'connected' : 'disconnected'}">
+                    {selectedWallet.is_connected ? 'Подключен' : 'Отключен'}
+                  </span>
+                </span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Дата регистрации:</span>
+                <span class="info-value">{formatDate(selectedWallet.registration_date)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 {/if}
 
 
@@ -954,18 +1223,21 @@
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
   }
   
   table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 800px;
   }
   
   th, td {
     padding: 1rem;
     text-align: left;
     border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap;
   }
   
   th {
@@ -979,6 +1251,16 @@
   
   tr:hover {
     background: #f8f9fa;
+  }
+  
+  .clickable-row {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .clickable-row:hover {
+    background: #e3f2fd !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
   
   tr:last-child td {
@@ -996,16 +1278,30 @@
     font-family: monospace;
     font-size: 0.9rem;
     transition: background 0.2s;
+    word-break: break-all;
+    text-align: left;
+    max-width: none;
   }
   
   .copy-btn:hover {
     background: #f0f0f0;
   }
   
-  .wallet-addr {
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .detail-btn {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.3s;
+  }
+  
+  .detail-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
   }
   
   /* Статусы */
@@ -1032,6 +1328,158 @@
   .status.failed {
     background: #f8d7da;
     color: #721c24;
+  }
+  
+  /* Модальные окна */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 16px;
+    max-width: 900px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 2px solid #e0e0e0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px 16px 0 0;
+  }
+  
+  .modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+  
+  .modal-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px solid white;
+    color: white;
+    font-size: 1.5rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .modal-close:hover {
+    background: white;
+    color: #667eea;
+    transform: rotate(90deg);
+  }
+  
+  .modal-body {
+    padding: 2rem;
+  }
+  
+  .info-section {
+    margin-bottom: 2rem;
+  }
+  
+  .info-section h3 {
+    margin: 0 0 1rem 0;
+    color: #333;
+    font-size: 1.2rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e0e0e0;
+  }
+  
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+  
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  
+  .info-item.full-width {
+    grid-column: 1 / -1;
+  }
+  
+  .info-label {
+    font-weight: 600;
+    color: #666;
+    font-size: 0.9rem;
+  }
+  
+  .info-value {
+    color: #333;
+    font-size: 1rem;
+    word-break: break-all;
+  }
+  
+  .info-value.copyable {
+    color: #667eea;
+    cursor: pointer;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+  
+  .info-value.copyable:hover {
+    background: #e3f2fd;
+    transform: translateX(2px);
+  }
+  
+  .mini-table {
+    overflow-x: auto;
+    margin-top: 1rem;
+  }
+  
+  .mini-table table {
+    font-size: 0.9rem;
+    min-width: 600px;
+  }
+  
+  .mini-table th,
+  .mini-table td {
+    padding: 0.75rem;
+  }
+  
+  .no-data {
+    text-align: center;
+    padding: 2rem;
+    color: #999;
+    font-style: italic;
+  }
+  
+  .positive {
+    color: #28a745;
+    font-weight: 600;
+  }
+  
+  .negative {
+    color: #dc3545;
+    font-weight: 600;
   }
   
   /* Типы транзакций */
