@@ -210,7 +210,11 @@ class PlinkoEngine {
     Matter.Composite.add(this.engine.world, ball);
 
     betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-    // Списываем ставку локально для мгновенного отображения
+    
+    // Синхронизируем ставку с сервером СРАЗУ при броске
+    await this.deductBetFromServer(ball.id);
+    
+    // Списываем ставку локально для мгновенного отображения (уже синхронизировано с сервером)
     balance.update((balance) => balance - this.betAmount);
   }
 
@@ -251,6 +255,48 @@ class PlinkoEngine {
   }
 
   /**
+   * Синхронизирует списание ставки с сервером сразу при броске мяча
+   */
+  private async deductBetFromServer(ballId: number): Promise<void> {
+    try {
+      const userId = window.localStorage.getItem('user_id');
+      if (!userId) return;
+
+      // Создаем запись о ставке на сервере (пока без результата)
+      const res = await fetch('/api/bets/place', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: Number(userId),
+          bet_amount: this.betAmount,
+          currency: 'STARS',
+          risk_level: this.riskLevel,
+          rows_count: this.rowCount,
+          ball_id: ballId,
+          status: 'in_progress'
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Обновляем баланс с сервера (ставка уже списана)
+        const serverBalance = Number(data?.balance?.stars_balance);
+        if (!Number.isNaN(serverBalance)) {
+          // Учитываем активные мячи, исключая текущий (он уже учтен на сервере)
+          const activeBets = get(betAmountOfExistingBalls);
+          const remainingBetsSum = Object.entries(activeBets)
+            .filter(([existingBallId]) => Number(existingBallId) !== ballId)
+            .reduce((sum, [, betAmount]) => sum + betAmount, 0);
+          
+          balance.set(serverBalance - remainingBetsSum);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка при синхронизации ставки с сервером:', error);
+    }
+  }
+
+  /**
    * Called when a ball hits the invisible sensor at the bottom.
    */
   private async handleBallEnterBin(ball: Matter.Body) {
@@ -279,28 +325,26 @@ class PlinkoEngine {
         const lastTotalProfit = history.slice(-1)[0];
         return [...history, lastTotalProfit + profit];
       });
-      // Синхронизируем с БД: создаём ставку на сервере и забираем обновлённый баланс
+      // Синхронизируем результат с БД: обновляем существующую ставку и начисляем выигрыш
       try {
         const userId = window.localStorage.getItem('user_id');
         if (userId) {
-          const res = await fetch('/api/bets', {
+          const res = await fetch('/api/bets/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               user_id: Number(userId),
-              bet_amount: this.betAmount,
-              currency: 'STARS',
-              risk_level: this.riskLevel,
-              rows_count: this.rowCount,
-              client_result: {
+              ball_id: ball.id,
+              result: {
+                bin_index: binIndex,
                 multiplier,
                 payout: payoutValue,
                 profit,
                 is_win: multiplier > 1,
-                ball_path: [] as number[],
               },
             }),
           });
+          
           if (res.ok) {
             const data = await res.json();
             const serverBalance = Number(data?.balance?.stars_balance);

@@ -8,30 +8,36 @@
   import GitHubLogo from 'phosphor-svelte/lib/GithubLogo';
 
   $effect(() => {
+    // Сначала загружаем баланс из localStorage для быстрого отображения
     setBalanceFromLocalStorage();
-    // После загрузки страницы пробуем подтянуть баланс из БД, если есть user_id
+    
+    // Затем синхронизируем с сервером для получения актуального баланса
     const userId = localStorage.getItem('user_id');
     if (userId) {
-      fetch(`/api/users/${userId}/balance`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data?.user?.balance?.stars != null) {
-            import('$lib/stores/game').then(({ balance }) => {
-              // Не перезаписываем баланс, если он уже был изменён после загрузки страницы
-              const local = localStorage.getItem('plinko_balance');
-              const loaded = Number(local);
-              const fromServer = Number(data.user.balance.stars) || 0;
-              // Если баланс в localStorage совпадает с дефолтным, то можно обновить из БД
-              if (isNaN(loaded) || loaded === 100) {
-                balance.set(fromServer);
-              }
-              // Если пользователь уже сделал ставку (баланс изменился), не трогаем
-            });
-          }
-        })
-        .catch(() => {});
+      syncBalanceWithServer(userId);
     }
   });
+
+  async function syncBalanceWithServer(userId: string) {
+    try {
+      const response = await fetch(`/api/users/${userId}/balance`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.user?.balance?.stars != null) {
+          const { balance } = await import('$lib/stores/game');
+          const serverBalance = Number(data.user.balance.stars) || 0;
+          
+          // Всегда обновляем баланс с сервера - это источник истины
+          balance.set(serverBalance);
+          localStorage.setItem('plinko_balance', String(serverBalance));
+          
+          console.log('Баланс синхронизирован с сервером:', serverBalance);
+        }
+      }
+    } catch (error) {
+      console.error('Ошибка синхронизации баланса:', error);
+    }
+  }
 </script>
 
 <svelte:window onbeforeunload={writeBalanceToLocalStorage} />
