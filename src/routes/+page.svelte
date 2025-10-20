@@ -12,6 +12,13 @@
     // После загрузки страницы пробуем подтянуть баланс из БД, если есть user_id
     const userId = localStorage.getItem('user_id');
     if (userId) {
+      // Сначала досчитаем все незавершенные ставки, чтобы баланс был окончательным
+      fetch('/api/bets/settle-pending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: Number(userId) })
+      }).catch(() => {});
+
       fetch(`/api/users/${userId}/balance`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
