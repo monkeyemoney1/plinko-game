@@ -48,12 +48,6 @@ class PlinkoEngine {
   private runner: Matter.Runner;
 
   /**
-   * Флаг активен ли движок (рендер и физика запущены). Нужен, чтобы
-   * не позволять бросать шарики, когда игра не активна или страница покинута.
-   */
-  private isRunning = false;
-
-  /**
    * Every pin of the game.
    */
   private pins: Matter.Body[] = [];
@@ -175,7 +169,6 @@ class PlinkoEngine {
   start() {
     Matter.Render.run(this.render); // Renders the scene to canvas
     Matter.Runner.run(this.runner, this.engine); // Starts the simulation in physics engine
-    this.isRunning = true;
   }
 
   /**
@@ -184,13 +177,10 @@ class PlinkoEngine {
   stop() {
     Matter.Render.stop(this.render);
     Matter.Runner.stop(this.runner);
-    this.isRunning = false;
-    // Удаляем все шары и очищаем связанные записи ставок
-    this.removeAllBalls();
   }
 
   /**
-   * Drops a new ball from the top with a random horizontal offset, and reserves the bet on server.
+   * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
   async dropBall() {
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
@@ -217,45 +207,11 @@ class PlinkoEngine {
         },
       },
     );
+    Matter.Composite.add(this.engine.world, ball);
 
-    // Сначала резервируем ставку на сервере
-    try {
-      const userId = window.localStorage.getItem('user_id');
-      if (userId) {
-        const res = await fetch('/api/bets/reserve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: Number(userId),
-            bet_amount: this.betAmount,
-            currency: 'STARS',
-            risk_level: this.riskLevel,
-            rows_count: this.rowCount,
-          }),
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          const serverBalance = Number(data?.balance?.stars_balance);
-          if (!Number.isNaN(serverBalance)) {
-            balance.set(serverBalance);
-            Matter.Composite.add(this.engine.world, ball);
-            betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-          }
-        } else {
-          // Ошибка резервирования - не добавляем шар
-          console.error('Failed to reserve bet');
-        }
-      } else {
-        // Нет пользователя - играем локально
-        Matter.Composite.add(this.engine.world, ball);
-        betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-        balance.update((balance) => balance - this.betAmount);
-      }
-    } catch (error) {
-      console.error('Bet reservation error:', error);
-      // В случае ошибки сети - не добавляем шар
-    }
+    betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
+    // Списываем ставку локально для мгновенного отображения
+    balance.update((balance) => balance - this.betAmount);
   }
 
   /**
@@ -323,8 +279,55 @@ class PlinkoEngine {
         const lastTotalProfit = history.slice(-1)[0];
         return [...history, lastTotalProfit + profit];
       });
-      // Ставка уже зарезервирована, просто начисляем выплату локально
-      balance.update((b) => b + payoutValue);
+      // Синхронизируем с БД: создаём ставку на сервере и забираем обновлённый баланс
+      try {
+        const userId = window.localStorage.getItem('user_id');
+        if (userId) {
+          const res = await fetch('/api/bets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: Number(userId),
+              bet_amount: this.betAmount,
+              currency: 'STARS',
+              risk_level: this.riskLevel,
+              rows_count: this.rowCount,
+              client_result: {
+                multiplier,
+                payout: payoutValue,
+                profit,
+                is_win: multiplier > 1,
+                ball_path: [] as number[],
+              },
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const serverBalance = Number(data?.balance?.stars_balance);
+            if (!Number.isNaN(serverBalance)) {
+              // Получаем сумму ставок от активных мячей (исключая текущий мяч)
+              const activeBets = get(betAmountOfExistingBalls);
+              const remainingBetsSum = Object.entries(activeBets)
+                .filter(([ballId]) => Number(ballId) !== ball.id)
+                .reduce((sum, [, betAmount]) => sum + betAmount, 0);
+              
+              // Устанавливаем баланс с учётом активных ставок
+              balance.set(serverBalance - remainingBetsSum);
+            } else {
+              // fallback - добавляем только выплату
+              balance.update((b) => b + payoutValue);
+            }
+          } else {
+            // fallback - добавляем только выплату
+            balance.update((b) => b + payoutValue);
+          }
+        } else {
+          // fallback - добавляем только выплату
+          balance.update((b) => b + payoutValue);
+        }
+      } catch {
+        balance.update((b) => b + profit);
+      }
     }
 
     Matter.Composite.remove(this.engine.world, ball);

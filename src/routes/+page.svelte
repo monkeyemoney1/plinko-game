@@ -9,7 +9,7 @@
 
   $effect(() => {
     setBalanceFromLocalStorage();
-    // После загрузки страницы подтягиваем баланс из БД, если есть user_id
+    // После загрузки страницы пробуем подтянуть баланс из БД, если есть user_id
     const userId = localStorage.getItem('user_id');
     if (userId) {
       fetch(`/api/users/${userId}/balance`)
@@ -17,11 +17,15 @@
         .then((data) => {
           if (data?.user?.balance?.stars != null) {
             import('$lib/stores/game').then(({ balance }) => {
+              // Не перезаписываем баланс, если он уже был изменён после загрузки страницы
+              const local = localStorage.getItem('plinko_balance');
+              const loaded = Number(local);
               const fromServer = Number(data.user.balance.stars) || 0;
-              balance.set(fromServer);
-              try {
-                localStorage.setItem('plinko_balance', String(fromServer));
-              } catch {}
+              // Если баланс в localStorage совпадает с дефолтным, то можно обновить из БД
+              if (isNaN(loaded) || loaded === 100) {
+                balance.set(fromServer);
+              }
+              // Если пользователь уже сделал ставку (баланс изменился), не трогаем
             });
           }
         })
