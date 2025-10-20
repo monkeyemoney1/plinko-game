@@ -264,9 +264,9 @@
       const data = await response.json();
       
       if (response.ok && data.success) {
-        clearSuccess = 'База данных успешно очищена!';
+        clearSuccess = 'База данных полностью очищена! Все пользователи и данные удалены. Проект чистый!';
         
-        // Сбрасываем все локальные данные
+        // Сбрасываем все локальные данные - полный сброс
         stats = {
           totalUsers: 0,
           telegramUsers: 0,
@@ -290,13 +290,14 @@
         recentGames = [];
         dbTables = [];
         tableData = null;
+        selectedTable = '';
         
-        // Перезагружаем статистику
+        // Перезагружаем статистику (должна показать 0 везде)
         await loadStats();
         
         setTimeout(() => {
           closeClearConfirmation();
-        }, 2000);
+        }, 3000);
       } else {
         clearError = data.error || 'Ошибка при очистке базы данных';
       }
@@ -1074,16 +1075,20 @@
         
         <div class="modal-body">
           <div class="warning-box">
-            <p><strong>ВНИМАНИЕ!</strong> Эта операция удалит ВСЕ данные из следующих таблиц:</p>
+            <p><strong>ВНИМАНИЕ!</strong> Эта операция удалит АБСОЛЮТНО ВСЕ данные из базы данных:</p>
             <ul>
+              <li><strong>Пользователи (users)</strong> - все аккаунты будут удалены</li>
               <li>Игровые ставки (game_bets)</li>
               <li>Транзакции (transactions)</li>
               <li>Депозиты (deposits, pending_deposits)</li>
               <li>Транзакции звёзд (star_transactions)</li>
               <li>Кошельки (user_wallets)</li>
-              <li>Балансы пользователей (сброс на 0)</li>
+              <li>Выводы средств (withdrawals)</li>
+              <li>Blockchain транзакции (blockchain_transactions)</li>
+              <li>Сессии (sessions)</li>
             </ul>
-            <p><strong>Это действие необратимо!</strong></p>
+            <p><strong>⚠️ ПОЛНЫЙ ВАЙП ПРОЕКТА! Это действие необратимо!</strong></p>
+            <p style="color: #dc3545; font-weight: bold;">После очистки в базе НЕ ОСТАНЕТСЯ НИ ОДНОГО ПОЛЬЗОВАТЕЛЯ!</p>
           </div>
           
           <div class="form-group">

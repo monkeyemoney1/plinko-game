@@ -14,7 +14,7 @@ export const POST: RequestHandler = async ({ request }) => {
       }, { status: 403 });
     }
 
-    // Очищаем все таблицы с данными (кроме структурных)
+    // ПОЛНАЯ ОЧИСТКА ВСЕХ ТАБЛИЦ - удаляем абсолютно все данные
     await db.query('BEGIN');
 
     try {
@@ -34,27 +34,34 @@ export const POST: RequestHandler = async ({ request }) => {
       // Очищаем кошельки
       await db.query('TRUNCATE TABLE user_wallets RESTART IDENTITY CASCADE');
       
-      // Сбрасываем балансы пользователей
-      await db.query(`
-        UPDATE users 
-        SET stars_balance = 0, 
-            ton_balance = 0,
-            updated_at = NOW()
-      `);
+      // Очищаем withdrawals (выводы средств)
+      await db.query('TRUNCATE TABLE withdrawals RESTART IDENTITY CASCADE');
+      
+      // Очищаем blockchain транзакции
+      await db.query('TRUNCATE TABLE blockchain_transactions RESTART IDENTITY CASCADE');
+      
+      // Очищаем сессии
+      await db.query('TRUNCATE TABLE sessions RESTART IDENTITY CASCADE');
+      
+      // УДАЛЯЕМ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ - полный вайп
+      await db.query('TRUNCATE TABLE users RESTART IDENTITY CASCADE');
 
       await db.query('COMMIT');
 
       return json({ 
         success: true, 
-        message: 'База данных успешно очищена',
+        message: 'База данных полностью очищена! Все пользователи и данные удалены.',
         cleared: {
+          users: true,
           game_bets: true,
           transactions: true,
           deposits: true,
           pending_deposits: true,
           star_transactions: true,
           user_wallets: true,
-          user_balances: true
+          withdrawals: true,
+          blockchain_transactions: true,
+          sessions: true
         }
       });
     } catch (error) {
