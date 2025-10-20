@@ -7,24 +7,12 @@
   import { setBalanceFromLocalStorage, writeBalanceToLocalStorage } from '$lib/utils/game';
   import GitHubLogo from 'phosphor-svelte/lib/GithubLogo';
 
-  import { isSyncing } from '$lib/stores/game';
-
   $effect(() => {
     setBalanceFromLocalStorage();
     // После загрузки страницы пробуем подтянуть баланс из БД, если есть user_id
     const userId = localStorage.getItem('user_id');
     if (userId) {
-      // Сначала досчитаем все незавершенные ставки, чтобы баланс был окончательным
-      isSyncing.set(true);
-      fetch('/api/bets/settle-pending', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: Number(userId) })
-      })
-        .catch(() => {})
-        .finally(() => {
-          // После settle-pending подтянем баланс
-          fetch(`/api/users/${userId}/balance`)
+      fetch(`/api/users/${userId}/balance`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.user?.balance?.stars != null) {
@@ -41,9 +29,7 @@
             });
           }
         })
-        .catch(() => {})
-        .finally(() => isSyncing.set(false));
-        });
+        .catch(() => {});
     }
   });
 </script>

@@ -1,21 +1,47 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { pool } from '$lib/server/db';
-import { binPayouts } from '$lib/constants/game';
 
-// Симуляция Plinko для любых rows_count 8..16: биномиальный шаг и подбор множителя из binPayouts
+// Симуляция игры Plinko
 function simulatePlinko(riskLevel: string, rowsCount: number): { multiplier: number; ballPath: number[] } {
-  const payouts = (binPayouts as any)[rowsCount]?.[riskLevel];
-  if (!payouts) throw new Error('Invalid risk level or rows count');
   const ballPath: number[] = [];
   let position = 0;
+  
+  // Симулируем движение шарика
   for (let row = 0; row < rowsCount; row++) {
-    const stepRight = Math.random() < 0.5 ? 1 : 0; // биномиальный шаг
-    position = Math.max(0, Math.min(row + 1, position + (stepRight ? 1 : -1)));
+    const direction = Math.random() < 0.5 ? -1 : 1;
+    position = Math.max(0, Math.min(row + 1, position + direction));
     ballPath.push(position);
   }
-  const finalIndex = Math.min(ballPath[ballPath.length - 1], payouts.length - 1);
-  return { multiplier: payouts[finalIndex], ballPath };
+  
+  // Таблица множителей в зависимости от риска и количества рядов
+  const multiplierTables: Record<string, Record<number, number[]>> = {
+    LOW: {
+      8: [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6],
+      12: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
+      16: [16, 9, 2, 1.4, 1.4, 1.2, 1.1, 1, 0.5, 1, 1.1, 1.2, 1.4, 1.4, 2, 9, 16]
+    },
+    MEDIUM: {
+      8: [13, 3, 1.3, 0.7, 0.4, 0.7, 1.3, 3, 13],
+      12: [24, 5, 1.8, 1.3, 0.9, 0.7, 0.4, 0.7, 0.9, 1.3, 1.8, 5, 24],
+      16: [33, 11, 4, 2, 1.1, 0.6, 0.3, 0.2, 0.2, 0.2, 0.3, 0.6, 1.1, 2, 4, 11, 33]
+    },
+    HIGH: {
+      8: [29, 4, 1.5, 0.3, 0.2, 0.3, 1.5, 4, 29],
+      12: [58, 9, 2, 1.2, 0.6, 0.4, 0.2, 0.4, 0.6, 1.2, 2, 9, 58],
+      16: [110, 41, 10, 5, 1.9, 0.3, 0.2, 0.1, 0.1, 0.1, 0.2, 0.3, 1.9, 5, 10, 41, 110]
+    }
+  };
+  
+  const table = multiplierTables[riskLevel]?.[rowsCount];
+  if (!table) {
+    throw new Error('Invalid risk level or rows count');
+  }
+  
+  const finalPosition = Math.min(ballPath[ballPath.length - 1], table.length - 1);
+  const multiplier = table[finalPosition];
+  
+  return { multiplier, ballPath };
 }
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -29,8 +55,7 @@ export const POST: RequestHandler = async ({ request }) => {
       currency = 'STARS', 
       risk_level, 
       rows_count,
-  client_result,
-  initiated
+      client_result
     } = body;
 
     // Валидация параметров
@@ -133,15 +158,18 @@ export const POST: RequestHandler = async ({ request }) => {
       multiplier, payout, profit, isWin, JSON.stringify(ballPath ?? [])
     ]);
 
-    // Обновляем баланс пользователя:
-    // - если клиент прислал client_result с initiated=true, ставка уже списана, начисляем profit
-    // - если это чисто серверная симуляция (без initiated), начисляем profit (включает списание ставки)
+    // Обновляем баланс пользователя
+    const balanceChange = profit; // profit уже учитывает потерю ставки
     const balanceField = currency === 'STARS' ? 'stars_balance' : 'ton_balance';
-    const creditAmount = profit; // всегда profit, так как он корректно учитывает контекст
-    await client.query(
-      `UPDATE users SET ${balanceField} = ${balanceField} + $1, updated_at = NOW() WHERE id = $2`,
-      [creditAmount, user_id],
-    );    // Получаем обновленный баланс
+    
+    await client.query(`
+      UPDATE users 
+      SET ${balanceField} = ${balanceField} + $1,
+          updated_at = NOW()
+      WHERE id = $2
+    `, [balanceChange, user_id]);
+
+    // Получаем обновленный баланс
     const updatedUserResult = await client.query(
       'SELECT stars_balance, ton_balance FROM users WHERE id = $1',
       [user_id]

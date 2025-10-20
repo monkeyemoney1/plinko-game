@@ -10,16 +10,6 @@
   // Игровой баланс TON и Stars
   import { balance } from '$lib/stores/game';
   let tonBalance = 0;
-
-  // Простой helper для приведения TON-адреса к user-friendly (UQ) формату
-  async function normalizeAddressClient(addr: string): Promise<string> {
-    try {
-      return toUserFriendlyAddress(addr);
-    } catch (e) {
-      console.warn('toUserFriendlyAddress failed, using original addr');
-      return addr;
-    }
-  }
   
   async function loadBalance() {
     const userId = localStorage.getItem('user_id');
@@ -38,19 +28,7 @@
     }
   }
   onMount(() => {
-    // Сначала досчитаем возможные незавершенные ставки, затем загрузим баланс
-    const userId = localStorage.getItem('user_id');
-    if (userId) {
-      fetch('/api/bets/settle-pending', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: Number(userId) })
-      }).finally(() => {
-        loadBalance();
-      });
-    } else {
-      loadBalance();
-    }
+    loadBalance();
     
     // Инициализируем TON Connect UI
     tonConnectUI = new TonConnectUI({
@@ -76,7 +54,7 @@
     
     try {
       // Конвертируем адрес в user-friendly формат (UQ, 48 символов)
-  const normalizedAddress = await normalizeAddressClient(walletAddress);
+      const normalizedAddress = await normalizeAddressClient(walletAddress);
       
       await fetch('/api/wallet/track-connection', {
         method: 'POST',
@@ -206,8 +184,8 @@
       
       // Fallback
       if (!telegramId) {
-        const uid = localStorage.getItem('user_id') || '0';
-        telegramId = parseInt(uid) || 123456789;
+        const userId = localStorage.getItem('user_id');
+        telegramId = parseInt(userId) || 123456789;
       }
       
       const res = await fetch('/api/payments/stars/verify', {
@@ -325,7 +303,7 @@
     }
   }
   
-  async function checkDepositStatus(userId: string, userAddress: string, verifyAmount: number) {
+  async function checkDepositStatus(userId, userAddress, verifyAmount) {
     const maxAttempts = 40; // Максимум 40 попыток (20 минут при проверке каждые 15 сек)
     let attempts = 0;
 
@@ -490,15 +468,6 @@
       .catch(() => {});
   }
   function logout() {
-    // Перед выходом, если вдруг остались незавершенные ставки, досчитаем
-    const userId = localStorage.getItem('user_id');
-    if (userId) {
-      fetch('/api/bets/settle-pending', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: Number(userId) })
-      }).catch(() => {});
-    }
     localStorage.removeItem('plinko_is_auth');
     localStorage.removeItem('user_id');
     localStorage.removeItem('ton_address');
@@ -518,7 +487,6 @@
     margin: 0;
   }
   input[type="number"] {
-    appearance: textfield;
     -moz-appearance: textfield;
   }
 </style>

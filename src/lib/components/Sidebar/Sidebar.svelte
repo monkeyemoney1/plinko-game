@@ -20,7 +20,6 @@
   import { twMerge } from 'tailwind-merge';
   import { tonConnectUI } from '$lib/tonconnect';
   import { goto } from '$app/navigation';
-  import { isSyncing } from '$lib/stores/game';
 
   let betMode: BetMode = $state(BetMode.MANUAL);
 
@@ -44,7 +43,7 @@
   let isAutoBetInputNegative = $derived(autoBetInput < 0);
 
   let isDropBallDisabled = $derived(
-    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance || isAutoBetInputNegative || $isSyncing,
+    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance || isAutoBetInputNegative,
   );
 
   let hasOutstandingBalls = $derived(Object.keys($betAmountOfExistingBalls).length > 0);
@@ -66,7 +65,7 @@
     }
   }
 
-  async function autoBetDropBall() {
+  function autoBetDropBall() {
     if (isBetExceedBalance) {
       resetAutoBetInterval();
       return;
@@ -74,20 +73,13 @@
 
     // Infinite mode
     if (autoBetsLeft === null) {
-      const ok = await $plinkoEngine?.dropBall();
-      if (!ok) {
-        resetAutoBetInterval();
-      }
+      $plinkoEngine?.dropBall();
       return;
     }
 
     // Finite mode
     if (autoBetsLeft > 0) {
-      const ok = await $plinkoEngine?.dropBall();
-      if (!ok) {
-        resetAutoBetInterval();
-        return;
-      }
+      $plinkoEngine?.dropBall();
       autoBetsLeft -= 1;
     }
     if (autoBetsLeft === 0 && autoBetInterval !== null) {
@@ -106,14 +98,12 @@
     }
   };
 
-  async function handleBetClick() {
-    if ($isSyncing) return;
+  function handleBetClick() {
     if (betMode === BetMode.MANUAL) {
-      await $plinkoEngine?.dropBall();
+      $plinkoEngine?.dropBall();
     } else if (autoBetInterval === null) {
-      if ($isSyncing) return;
       autoBetsLeft = autoBetInput === 0 ? null : autoBetInput;
-      autoBetInterval = setInterval(() => { void autoBetDropBall(); }, autoBetIntervalMs);
+      autoBetInterval = setInterval(autoBetDropBall, autoBetIntervalMs);
     } else if (autoBetInterval !== null) {
       resetAutoBetInterval();
     }
