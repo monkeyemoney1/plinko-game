@@ -80,6 +80,11 @@ class PlinkoEngine {
   private static BALL_CATEGORY = 0x0002;
 
   /**
+   * Server bet ids mapped per active ball id to ensure we can resolve them when the ball lands.
+   */
+  private betIdByBallId: Record<number, number> = {};
+
+  /**
    * Friction parameters to be applied to the ball body.
    *
    * Higher friction leads to more concentrated distribution towards the center. These numbers
@@ -207,11 +212,51 @@ class PlinkoEngine {
         },
       },
     );
-    Matter.Composite.add(this.engine.world, ball);
+  Matter.Composite.add(this.engine.world, ball);
 
     betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-    // Списываем ставку локально для мгновенного отображения
-    balance.update((balance) => balance - this.betAmount);
+    // Сразу инициализируем ставку на сервере, чтобы списание зафиксировалось даже при перезагрузке
+    try {
+      const userId = window.localStorage.getItem('user_id');
+      if (userId) {
+        const res = await fetch('/api/bets/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: Number(userId),
+            bet_amount: this.betAmount,
+            currency: 'STARS',
+            risk_level: this.riskLevel,
+            rows_count: this.rowCount,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const serverBalance = Number(data?.balance?.stars_balance);
+          if (data?.bet?.id) {
+            this.betIdByBallId[ball.id] = Number(data.bet.id);
+          }
+          if (!Number.isNaN(serverBalance)) {
+            // Вычитаем ставки прочих активных шаров для корректного локального отображения
+            const active = Object.entries(get(betAmountOfExistingBalls)).filter(([bid]) => Number(bid) !== ball.id);
+            const sumOthers = active.reduce((s, [, amt]) => s + (amt as number), 0);
+            balance.set(serverBalance - sumOthers);
+          } else {
+            // если ответ странный, просто спишем локально
+            balance.update((b) => b - this.betAmount);
+          }
+        } else {
+          // В случае ошибки сервера не блокируем UX, списываем локально
+          balance.update((b) => b - this.betAmount);
+        }
+      } else {
+        // Нет userId — только локально
+        balance.update((b) => b - this.betAmount);
+      }
+    } catch {
+      // На случай сетевой ошибки показываем локальное списание
+      balance.update((b) => b - this.betAmount);
+    }
   }
 
   /**
@@ -279,27 +324,40 @@ class PlinkoEngine {
         const lastTotalProfit = history.slice(-1)[0];
         return [...history, lastTotalProfit + profit];
       });
-      // Синхронизируем с БД: создаём ставку на сервере и забираем обновлённый баланс
+      // Завершаем ставку на сервере и синхронизируем баланс
       try {
         const userId = window.localStorage.getItem('user_id');
         if (userId) {
-          const res = await fetch('/api/bets', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: Number(userId),
-              bet_amount: this.betAmount,
-              currency: 'STARS',
-              risk_level: this.riskLevel,
-              rows_count: this.rowCount,
-              client_result: {
+          const betId = this.betIdByBallId[ball.id];
+          const endpoint = betId ? '/api/bets/resolve' : '/api/bets';
+          const payload = betId
+            ? {
+                bet_id: betId,
+                user_id: Number(userId),
                 multiplier,
                 payout: payoutValue,
                 profit,
                 is_win: multiplier > 1,
                 ball_path: [] as number[],
-              },
-            }),
+              }
+            : {
+                user_id: Number(userId),
+                bet_amount: this.betAmount,
+                currency: 'STARS',
+                risk_level: this.riskLevel,
+                rows_count: this.rowCount,
+                client_result: {
+                  multiplier,
+                  payout: payoutValue,
+                  profit,
+                  is_win: multiplier > 1,
+                  ball_path: [] as number[],
+                },
+              };
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
           });
           if (res.ok) {
             const data = await res.json();
@@ -336,6 +394,8 @@ class PlinkoEngine {
       delete newValue[ball.id];
       return newValue;
     });
+    // очищаем привязанный betId
+    delete this.betIdByBallId[ball.id];
   }
 
   /**
