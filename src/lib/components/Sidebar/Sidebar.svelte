@@ -19,7 +19,8 @@
   import type { FormEventHandler } from 'svelte/elements';
   import { twMerge } from 'tailwind-merge';
   import { tonConnectUI } from '$lib/tonconnect';
-  import { goto } from '$app/navigation';
+  import { goto, beforeNavigate } from '$app/navigation';
+  import { onDestroy } from 'svelte';
 
   let betMode: BetMode = $state(BetMode.MANUAL);
 
@@ -48,15 +49,6 @@
 
   let hasOutstandingBalls = $derived(Object.keys($betAmountOfExistingBalls).length > 0);
 
-  // Временный переключатель скорости (для тестов)
-  // 1x (нормально), 0.5x (в 2 раза медленнее), 0.33x (в ~3 раза медленнее)
-  let speedLabel = $state<'1x' | '0.5x' | '0.33x'>('1x');
-  function applySpeed(label: '1x' | '0.5x' | '0.33x') {
-    speedLabel = label;
-    const scale = label === '1x' ? 1 : label === '0.5x' ? 0.5 : 0.33;
-    $plinkoEngine?.setTimeScale?.(scale);
-  }
-
   const handleBetAmountFocusOut: FormEventHandler<HTMLInputElement> = (e) => {
     const parsedValue = parseFloat(e.currentTarget.value.trim());
     if (isNaN(parsedValue)) {
@@ -73,6 +65,17 @@
       autoBetInterval = null;
     }
   }
+
+  // Останавливаем авто-бросок при уходе со страницы / перезагрузке / размонтировании
+  onDestroy(() => {
+    resetAutoBetInterval();
+  });
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', resetAutoBetInterval);
+  }
+  beforeNavigate(() => {
+    resetAutoBetInterval();
+  });
 
   function autoBetDropBall() {
     if (isBetExceedBalance) {
@@ -277,24 +280,6 @@
   <div class="mt-auto pt-5">
     <div class="flex items-center gap-4 border-t border-slate-600 pt-3">
       <Tooltip.Provider delayDuration={0} disableCloseOnTriggerClick>
-        <!-- Временный переключатель скорости игры -->
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-slate-300">Скорость:</span>
-          <div class="flex rounded-md overflow-hidden border border-slate-600">
-            <button
-              class={twMerge('px-2 py-1 text-xs text-white bg-slate-700 hover:bg-slate-600', speedLabel === '1x' && 'bg-slate-600')}
-              onclick={() => applySpeed('1x')}
-            >1x</button>
-            <button
-              class={twMerge('px-2 py-1 text-xs text-white bg-slate-700 hover:bg-slate-600 border-l border-slate-600', speedLabel === '0.5x' && 'bg-slate-600')}
-              onclick={() => applySpeed('0.5x')}
-            >0.5x</button>
-            <button
-              class={twMerge('px-2 py-1 text-xs text-white bg-slate-700 hover:bg-slate-600 border-l border-slate-600', speedLabel === '0.33x' && 'bg-slate-600')}
-              onclick={() => applySpeed('0.33x')}
-            >0.33x</button>
-          </div>
-        </div>
         <!-- Live Stats Button + Logout Button -->
         <div style="display: flex; align-items: center; gap: 8px;">
           <button

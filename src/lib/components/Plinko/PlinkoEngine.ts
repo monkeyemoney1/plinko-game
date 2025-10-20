@@ -180,16 +180,6 @@ class PlinkoEngine {
   }
 
   /**
-   * Sets physics simulation speed. 1 = normal, 0.5 = 2x slower, ~0.333 = 3x slower.
-   * Temporary helper for tests.
-   */
-  public setTimeScale(scale: number) {
-    // Clamp to reasonable range to avoid breaking physics
-    const clamped = Math.max(0.1, Math.min(scale, 2));
-    this.engine.timing.timeScale = clamped;
-  }
-
-  /**
    * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
   async dropBall() {

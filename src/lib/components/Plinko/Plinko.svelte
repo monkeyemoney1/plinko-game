@@ -15,6 +15,7 @@
     return {
       destroy: () => {
         $plinkoEngine?.stop();
+        $plinkoEngine = null;
       },
     };
   };
