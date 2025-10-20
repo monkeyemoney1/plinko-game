@@ -11,15 +11,23 @@
       property="og:description"
       content="A web-based Plinko game inspired by Stake.com, built using Svelte and Tailwind CSS"
     />
-    <script>
-      // Polyfills для совместимости
+    <script type="module">
+      // Import Buffer polyfill immediately
+      import { Buffer } from 'buffer';
+      
+      // Set up global environment before any other scripts load
       if (typeof global === 'undefined') {
-        var global = globalThis;
+        globalThis.global = globalThis;
       }
       if (typeof process === 'undefined') {
-        var process = { env: {}, browser: true };
+        globalThis.process = { env: {}, browser: true };
       }
-      // Предотвращаем ошибки консоли
+      
+      // Make Buffer available globally IMMEDIATELY
+      globalThis.Buffer = Buffer;
+      window.Buffer = Buffer;
+      
+      // Prevent console errors
       if (!window.console) {
         window.console = { log: function() {}, error: function() {}, warn: function() {} };
       }

@@ -10,14 +10,22 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+    'process.env.NODE_ENV': '"production"'
   },
   optimizeDeps: {
-    include: ['buffer'],
-    exclude: ['svelte']
+    include: ['buffer', '@ton/core', '@ton/crypto', '@ton/ton'],
+    exclude: ['svelte'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
   },
   resolve: {
     alias: {
-      buffer: 'buffer'
+      buffer: 'buffer/',
+      stream: 'stream-browserify',
+      util: 'util/'
     }
   },
   ssr: {
