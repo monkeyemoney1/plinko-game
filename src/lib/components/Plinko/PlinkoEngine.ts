@@ -237,12 +237,8 @@ class PlinkoEngine {
             this.betIdByBallId[ball.id] = Number(data.bet.id);
           }
           if (!Number.isNaN(serverBalance)) {
-            // Вычитаем ставки прочих активных шаров для корректного локального отображения
-            const active = Object.entries(get(betAmountOfExistingBalls)).filter(([bid]) => Number(bid) !== ball.id);
-            const sumOthers = active.reduce((s, [, amt]) => s + (amt as number), 0);
-            balance.set(serverBalance - sumOthers);
+            balance.set(serverBalance);
           } else {
-            // если ответ странный, просто спишем локально
             balance.update((b) => b - this.betAmount);
           }
         } else {
@@ -340,12 +336,13 @@ class PlinkoEngine {
                 is_win: multiplier > 1,
                 ball_path: [] as number[],
               }
-            : {
+      : {
                 user_id: Number(userId),
                 bet_amount: this.betAmount,
                 currency: 'STARS',
                 risk_level: this.riskLevel,
                 rows_count: this.rowCount,
+        initiated: true,
                 client_result: {
                   multiplier,
                   payout: payoutValue,
@@ -363,14 +360,7 @@ class PlinkoEngine {
             const data = await res.json();
             const serverBalance = Number(data?.balance?.stars_balance);
             if (!Number.isNaN(serverBalance)) {
-              // Получаем сумму ставок от активных мячей (исключая текущий мяч)
-              const activeBets = get(betAmountOfExistingBalls);
-              const remainingBetsSum = Object.entries(activeBets)
-                .filter(([ballId]) => Number(ballId) !== ball.id)
-                .reduce((sum, [, betAmount]) => sum + betAmount, 0);
-              
-              // Устанавливаем баланс с учётом активных ставок
-              balance.set(serverBalance - remainingBetsSum);
+              balance.set(serverBalance);
             } else {
               // если сервер не вернул баланс по какой-то причине, оставляем локальный как есть
             }
