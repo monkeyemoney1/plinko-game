@@ -20,6 +20,7 @@
   import { twMerge } from 'tailwind-merge';
   import { tonConnectUI } from '$lib/tonconnect';
   import { goto } from '$app/navigation';
+  import { isSyncing } from '$lib/stores/game';
 
   let betMode: BetMode = $state(BetMode.MANUAL);
 
@@ -43,7 +44,7 @@
   let isAutoBetInputNegative = $derived(autoBetInput < 0);
 
   let isDropBallDisabled = $derived(
-    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance || isAutoBetInputNegative,
+    $plinkoEngine === null || isBetAmountNegative || isBetExceedBalance || isAutoBetInputNegative || $isSyncing,
   );
 
   let hasOutstandingBalls = $derived(Object.keys($betAmountOfExistingBalls).length > 0);
@@ -106,9 +107,11 @@
   };
 
   async function handleBetClick() {
+    if ($isSyncing) return;
     if (betMode === BetMode.MANUAL) {
       await $plinkoEngine?.dropBall();
     } else if (autoBetInterval === null) {
+      if ($isSyncing) return;
       autoBetsLeft = autoBetInput === 0 ? null : autoBetInput;
       autoBetInterval = setInterval(() => { void autoBetDropBall(); }, autoBetIntervalMs);
     } else if (autoBetInterval !== null) {

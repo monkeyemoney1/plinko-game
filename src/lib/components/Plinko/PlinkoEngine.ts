@@ -12,6 +12,7 @@ import type { RiskLevel, RowCount } from '$lib/types';
 import { getRandomBetween } from '$lib/utils/numbers';
 import Matter, { type IBodyDefinition } from 'matter-js';
 import { get } from 'svelte/store';
+import { isSyncing } from '$lib/stores/game';
 import { v4 as uuidv4 } from 'uuid';
 
 type BallFrictionsByRowCount = {
@@ -188,6 +189,7 @@ class PlinkoEngine {
    * Drops a new ball from the top with a random horizontal offset, and deducts the balance.
    */
   async dropBall(): Promise<boolean> {
+    if (get(isSyncing)) return false;
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;
@@ -321,6 +323,17 @@ class PlinkoEngine {
    * Called when a ball hits the invisible sensor at the bottom.
    */
   private async handleBallEnterBin(ball: Matter.Body) {
+    if (get(isSyncing)) {
+      // Если идёт синхронизация, удалим шар и не будем завершать ставку (settle-pending делает это)
+      Matter.Composite.remove(this.engine.world, ball);
+      betAmountOfExistingBalls.update((value) => {
+        const newValue = { ...value };
+        delete newValue[ball.id];
+        return newValue;
+      });
+      delete this.betIdByBallId[ball.id];
+      return;
+    }
     const binIndex = this.pinsLastRowXCoords.findLastIndex((pinX) => pinX < ball.position.x);
   if (binIndex !== -1 && binIndex < this.pinsLastRowXCoords.length - 1) {
       const betAmount = get(betAmountOfExistingBalls)[ball.id] ?? 0;

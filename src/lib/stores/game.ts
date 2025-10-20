@@ -40,6 +40,12 @@ export const totalProfitHistory = writable<number[]>([0]);
 export const balance = writable<number>(DEFAULT_BALANCE);
 
 /**
+ * Global flag indicating we are syncing balances/pending bets with the server.
+ * Use this to temporarily disable interactions (e.g., drop button) to avoid race conditions.
+ */
+export const isSyncing = writable<boolean>(false);
+
+/**
  * RGB colors for every bin. The length of the array is the number of bins.
  */
 export const binColors = derived<typeof rowCount, { background: string[]; shadow: string[] }>(
