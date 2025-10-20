@@ -39,8 +39,8 @@ export const POST: RequestHandler = async ({ request }) => {
       [user_id],
     );
 
-  let starsPayoutSum = 0;
-  let tonPayoutSum = 0;
+    let starsProfitSum = 0;
+    let tonProfitSum = 0;
     let settled = 0;
 
     for (const bet of betsRes.rows) {
@@ -60,27 +60,25 @@ export const POST: RequestHandler = async ({ request }) => {
           [multiplier, payout, profit, isWin, JSON.stringify(sim.ballPath), bet.id],
         );
 
-        if (bet.currency === 'TON') tonPayoutSum += payout; else starsPayoutSum += payout;
+        if (bet.currency === 'TON') tonProfitSum += profit; else starsProfitSum += profit;
         settled += 1;
       } catch (e) {
         // Если не поддерживаем rows_count — пропускаем ставку (оставим pending)
       }
     }
 
-    if (starsPayoutSum !== 0) {
+    if (starsProfitSum !== 0) {
       await client.query(
         'UPDATE users SET stars_balance = stars_balance + $1, updated_at = NOW() WHERE id = $2',
-        [starsPayoutSum, user_id],
+        [starsProfitSum, user_id],
       );
     }
-    if (tonPayoutSum !== 0) {
+    if (tonProfitSum !== 0) {
       await client.query(
         'UPDATE users SET ton_balance = ton_balance + $1, updated_at = NOW() WHERE id = $2',
-        [tonPayoutSum, user_id],
+        [tonProfitSum, user_id],
       );
-    }
-
-    const updated = await client.query('SELECT stars_balance, ton_balance FROM users WHERE id = $1', [user_id]);
+    }    const updated = await client.query('SELECT stars_balance, ton_balance FROM users WHERE id = $1', [user_id]);
     await client.query('COMMIT');
 
     return json({

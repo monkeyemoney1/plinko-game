@@ -134,16 +134,14 @@ export const POST: RequestHandler = async ({ request }) => {
     ]);
 
     // Обновляем баланс пользователя:
-    // - если клиент прислал client_result, считаем, что ставка уже была списана (initiate), начисляем payout
-    // - если это чисто серверная симуляция (fallback без client_result), начисляем profit
-  const balanceField = currency === 'STARS' ? 'stars_balance' : 'ton_balance';
-  const creditAmount = (client_result && initiated) ? payout : (client_result ? payout : profit);
+    // - если клиент прислал client_result с initiated=true, ставка уже списана, начисляем profit
+    // - если это чисто серверная симуляция (без initiated), начисляем profit (включает списание ставки)
+    const balanceField = currency === 'STARS' ? 'stars_balance' : 'ton_balance';
+    const creditAmount = profit; // всегда profit, так как он корректно учитывает контекст
     await client.query(
       `UPDATE users SET ${balanceField} = ${balanceField} + $1, updated_at = NOW() WHERE id = $2`,
       [creditAmount, user_id],
-    );
-
-    // Получаем обновленный баланс
+    );    // Получаем обновленный баланс
     const updatedUserResult = await client.query(
       'SELECT stars_balance, ton_balance FROM users WHERE id = $1',
       [user_id]
