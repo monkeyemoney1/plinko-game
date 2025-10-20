@@ -2,38 +2,9 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import type { RequestHandler } from '@sveltejs/kit';
 
-/**
- * Обеспечивает существование таблицы game_results
- */
-async function ensureGameResultsTableExists(): Promise<void> {
-  try {
-    const createTableSQL = `
-      CREATE TABLE IF NOT EXISTS game_results (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL,
-          bet_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-          payout DECIMAL(10,2) NOT NULL DEFAULT 0,
-          multiplier DECIMAL(10,4) NOT NULL DEFAULT 0,
-          outcome VARCHAR(50),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_game_results_user_id ON game_results(user_id);
-      CREATE INDEX IF NOT EXISTS idx_game_results_created_at ON game_results(created_at);
-    `;
-    
-    await db.query(createTableSQL);
-  } catch (error) {
-    console.error('Ошибка создания таблицы game_results:', error);
-  }
-}
-
 export const GET: RequestHandler = async () => {
   try {
-    // Создаем таблицу game_results если её нет
-    await ensureGameResultsTableExists();
-    
-    // Получаем игровую статистику
+    // Получаем игровую статистику из таблицы game_bets
     const statsQuery = `
       SELECT 
         COUNT(*) as total_games,
@@ -41,7 +12,7 @@ export const GET: RequestHandler = async () => {
         COALESCE(SUM(payout), 0) as total_payouts,
         COALESCE(AVG(bet_amount), 0) as average_bet,
         COALESCE(MAX(payout), 0) as biggest_win
-      FROM game_results
+      FROM game_bets
     `;
     
     const statsResult = await db.query(statsQuery);
@@ -55,9 +26,15 @@ export const GET: RequestHandler = async () => {
     // Получаем последние игры
     const recentGamesQuery = `
       SELECT 
-        gr.*,
-        (payout - bet_amount) as profit
-      FROM game_results gr
+        id,
+        user_id,
+        bet_amount,
+        multiplier,
+        payout,
+        profit,
+        is_win,
+        created_at
+      FROM game_bets
       ORDER BY created_at DESC
       LIMIT 50
     `;
