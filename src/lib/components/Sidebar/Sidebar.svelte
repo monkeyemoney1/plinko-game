@@ -20,6 +20,7 @@
   import { twMerge } from 'tailwind-merge';
   import { tonConnectUI } from '$lib/tonconnect';
   import { goto } from '$app/navigation';
+  import { onDestroy } from 'svelte';
 
   let betMode: BetMode = $state(BetMode.MANUAL);
 
@@ -64,6 +65,11 @@
       autoBetInterval = null;
     }
   }
+
+  // Останавливаем автоигру при размонтировании компонента
+  onDestroy(() => {
+    resetAutoBetInterval();
+  });
 
   function autoBetDropBall() {
     if (isBetExceedBalance) {
@@ -281,13 +287,17 @@
           </button>
           <button
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold text-sm transition-colors"
-            onclick={() => goto('/profile')}
+            onclick={() => {
+              resetAutoBetInterval(); // Останавливаем автоигру перед переходом
+              goto('/profile');
+            }}
           >
             Профиль
           </button>
           <button
             class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold text-sm transition-colors"
             onclick={async () => {
+              resetAutoBetInterval(); // Останавливаем автоигру перед выходом
               try {
                 await tonConnectUI?.disconnect();
               } catch (e) {

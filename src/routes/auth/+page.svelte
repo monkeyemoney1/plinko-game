@@ -14,11 +14,11 @@
         if (wallet) {
           localStorage.setItem('plinko_is_auth', '1');
           
-          // Сохраняем адрес как есть (TON Connect уже возвращает правильный формат)
-          const normalizedAddress = wallet.account.address;
+          // Конвертируем адрес в user-friendly формат (UQ... 48 символов)
+          const normalizedAddress = await normalizeAddressClient(wallet.account.address);
           
           localStorage.setItem('ton_address', normalizedAddress);
-          console.log('Saved address:', normalizedAddress);
+          console.log('Saved user-friendly address:', normalizedAddress);
           try {
             // Пытаемся получить данные Telegram, если внедрены через WebApp initData или заранее сохранены
             let telegram_username: string | null = null;
@@ -34,7 +34,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                ton_address: wallet.account.address,
+                ton_address: normalizedAddress,
                 public_key: wallet.account.publicKey,
                 wallet_type: wallet.device?.appName || wallet.device?.platform || null,
                 wallet_version: wallet.device?.appVersion || null,

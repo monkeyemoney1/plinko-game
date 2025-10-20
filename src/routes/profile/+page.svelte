@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
   import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
+  import { toUserFriendlyAddress as convertToUserFriendly } from '$lib/ton-utils';
 
   let tonConnectUI: TonConnectUI;
   
@@ -53,15 +54,18 @@
     if (!userId) return;
     
     try {
+      // Конвертируем адрес в user-friendly формат перед сохранением
+      const userFriendlyAddress = await convertToUserFriendly(walletAddress);
+      
       await fetch('/api/wallet/track-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           user_id: parseInt(userId),
-          wallet_address: walletAddress
+          wallet_address: userFriendlyAddress
         })
       });
-      console.log('Подключение кошелька отслежено:', walletAddress);
+      console.log('Подключение кошелька отслежено:', userFriendlyAddress);
     } catch (error) {
       console.error('Ошибка отслеживания подключения кошелька:', error);
     }
