@@ -96,13 +96,6 @@
       return;
     }
 
-    // Не допускаем одновременных бросков поверх активных шаров (исключаем гонки/накладки)
-    if (hasOutstandingBalls) {
-      // Подождём следующий тик, но если шары не расходятся — остановим цикл
-      resetAutoBetInterval();
-      return;
-    }
-
     try {
       // Infinite mode
       if (autoBetsLeft === null) {
@@ -139,12 +132,6 @@
     // Проверяем, что движок доступен
     if (!$plinkoEngine) {
       console.warn('Plinko engine не инициализирован');
-      return;
-    }
-
-    // Если есть незавершённые мячи/ставки, запрещаем старт нового цикла автобета
-    if (betMode === BetMode.AUTO && hasOutstandingBalls) {
-      console.warn('Нельзя запустить авто-ставку при незавершённых бросках');
       return;
     }
 

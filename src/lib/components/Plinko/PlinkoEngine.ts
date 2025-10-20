@@ -193,10 +193,6 @@ class PlinkoEngine {
    * Drops a new ball from the top with a random horizontal offset, and reserves the bet on server.
    */
   async dropBall() {
-    // Если движок не активен (например, пользователь ушёл со страницы), запрещаем бросок
-    if (!this.isRunning) {
-      throw new Error('Engine is not running');
-    }
     const ballOffsetRangeX = this.pinDistanceX * 0.8;
     const ballRadius = this.pinRadius * 2;
     const { friction, frictionAirByRowCount } = PlinkoEngine.ballFrictions;
@@ -327,55 +323,8 @@ class PlinkoEngine {
         const lastTotalProfit = history.slice(-1)[0];
         return [...history, lastTotalProfit + profit];
       });
-      // Синхронизируем с БД: создаём ставку на сервере и забираем обновлённый баланс
-      try {
-        const userId = window.localStorage.getItem('user_id');
-        if (userId) {
-          const res = await fetch('/api/bets', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_id: Number(userId),
-              bet_amount: this.betAmount,
-              currency: 'STARS',
-              risk_level: this.riskLevel,
-              rows_count: this.rowCount,
-              client_result: {
-                multiplier,
-                payout: payoutValue,
-                profit,
-                is_win: multiplier > 1,
-                ball_path: [] as number[],
-              },
-            }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const serverBalance = Number(data?.balance?.stars_balance);
-            if (!Number.isNaN(serverBalance)) {
-              // Получаем сумму ставок от активных мячей (исключая текущий мяч)
-              const activeBets = get(betAmountOfExistingBalls);
-              const remainingBetsSum = Object.entries(activeBets)
-                .filter(([ballId]) => Number(ballId) !== ball.id)
-                .reduce((sum, [, betAmount]) => sum + betAmount, 0);
-              
-              // Устанавливаем баланс с учётом активных ставок
-              balance.set(serverBalance - remainingBetsSum);
-            } else {
-              // fallback - добавляем только выплату
-              balance.update((b) => b + payoutValue);
-            }
-          } else {
-            // fallback - добавляем только выплату
-            balance.update((b) => b + payoutValue);
-          }
-        } else {
-          // fallback - добавляем только выплату
-          balance.update((b) => b + payoutValue);
-        }
-      } catch {
-        balance.update((b) => b + profit);
-      }
+      // Ставка уже зарезервирована, просто начисляем выплату локально
+      balance.update((b) => b + payoutValue);
     }
 
     Matter.Composite.remove(this.engine.world, ball);
