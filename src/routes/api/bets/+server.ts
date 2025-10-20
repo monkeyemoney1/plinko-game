@@ -158,16 +158,15 @@ export const POST: RequestHandler = async ({ request }) => {
       multiplier, payout, profit, isWin, JSON.stringify(ballPath ?? [])
     ]);
 
-    // Обновляем баланс пользователя
-    const balanceChange = profit; // profit уже учитывает потерю ставки
+    // Обновляем баланс пользователя:
+    // - если клиент прислал client_result, считаем, что ставка уже была списана (initiate), начисляем payout
+    // - если это чисто серверная симуляция (fallback без client_result), начисляем profit
     const balanceField = currency === 'STARS' ? 'stars_balance' : 'ton_balance';
-    
-    await client.query(`
-      UPDATE users 
-      SET ${balanceField} = ${balanceField} + $1,
-          updated_at = NOW()
-      WHERE id = $2
-    `, [balanceChange, user_id]);
+    const creditAmount = client_result ? payout : profit;
+    await client.query(
+      `UPDATE users SET ${balanceField} = ${balanceField} + $1, updated_at = NOW() WHERE id = $2`,
+      [creditAmount, user_id],
+    );
 
     // Получаем обновленный баланс
     const updatedUserResult = await client.query(

@@ -66,9 +66,12 @@ export const POST: RequestHandler = async ({ request }) => {
       [mult, finalPayout, prof, win, JSON.stringify(bpath), bet_id],
     );
 
-    // Начисляем профит (profit уже учитывает списание ставки при initiate)
+    // Начисляем выплату (ставка уже была списана на этапе initiate)
     const balanceField = (bet.currency === 'TON') ? 'ton_balance' : 'stars_balance';
-    await client.query(`UPDATE users SET ${balanceField} = ${balanceField} + $1, updated_at = NOW() WHERE id = $2`, [prof, user_id]);
+    await client.query(
+      `UPDATE users SET ${balanceField} = ${balanceField} + $1, updated_at = NOW() WHERE id = $2`,
+      [finalPayout, user_id],
+    );
 
     const updated = await client.query('SELECT stars_balance, ton_balance FROM users WHERE id = $1', [user_id]);
 

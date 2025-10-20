@@ -372,19 +372,17 @@ class PlinkoEngine {
               // Устанавливаем баланс с учётом активных ставок
               balance.set(serverBalance - remainingBetsSum);
             } else {
-              // fallback - добавляем только выплату
-              balance.update((b) => b + payoutValue);
+              // если сервер не вернул баланс по какой-то причине, оставляем локальный как есть
             }
           } else {
-            // fallback - добавляем только выплату
-            balance.update((b) => b + payoutValue);
+            // оставляем локальный баланс, т.к. сервер уже начислил payout
           }
         } else {
-          // fallback - добавляем только выплату
+          // нет userId — начисляем локально выплату
           balance.update((b) => b + payoutValue);
         }
       } catch {
-        balance.update((b) => b + profit);
+        balance.update((b) => b + payoutValue);
       }
     }
 

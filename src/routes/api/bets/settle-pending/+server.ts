@@ -58,8 +58,8 @@ export const POST: RequestHandler = async ({ request }) => {
       [user_id],
     );
 
-    let starsProfit = 0;
-    let tonProfit = 0;
+  let starsPayoutSum = 0;
+  let tonPayoutSum = 0;
     let settled = 0;
 
     for (const bet of betsRes.rows) {
@@ -79,23 +79,23 @@ export const POST: RequestHandler = async ({ request }) => {
           [multiplier, payout, profit, isWin, JSON.stringify(sim.ballPath), bet.id],
         );
 
-        if (bet.currency === 'TON') tonProfit += profit; else starsProfit += profit;
+        if (bet.currency === 'TON') tonPayoutSum += payout; else starsPayoutSum += payout;
         settled += 1;
       } catch (e) {
         // Если не поддерживаем rows_count — пропускаем ставку (оставим pending)
       }
     }
 
-    if (starsProfit !== 0) {
+    if (starsPayoutSum !== 0) {
       await client.query(
         'UPDATE users SET stars_balance = stars_balance + $1, updated_at = NOW() WHERE id = $2',
-        [starsProfit, user_id],
+        [starsPayoutSum, user_id],
       );
     }
-    if (tonProfit !== 0) {
+    if (tonPayoutSum !== 0) {
       await client.query(
         'UPDATE users SET ton_balance = ton_balance + $1, updated_at = NOW() WHERE id = $2',
-        [tonProfit, user_id],
+        [tonPayoutSum, user_id],
       );
     }
 
