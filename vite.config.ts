@@ -28,12 +28,12 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true, // Remove console.log in production
+        drop_console: false, // Keep console for debugging
         drop_debugger: true,
         dead_code: true
       },
       mangle: {
-        toplevel: true
+        toplevel: false // Disable top-level mangling to prevent issues
       }
     },
     rollupOptions: {
@@ -51,7 +51,7 @@ export default defineConfig({
     },
     // Performance settings
     chunkSizeWarningLimit: 1000,
-    sourcemap: false, // Disable sourcemaps in production for smaller builds
+    sourcemap: true, // Enable sourcemaps for debugging
     reportCompressedSize: false // Speed up build process
   },
   // Development optimizations

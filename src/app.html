@@ -12,9 +12,16 @@
       content="A web-based Plinko game inspired by Stake.com, built using Svelte and Tailwind CSS"
     />
     <script>
-      // Polyfill для Buffer
+      // Polyfills для совместимости
       if (typeof global === 'undefined') {
         var global = globalThis;
+      }
+      if (typeof process === 'undefined') {
+        var process = { env: {}, browser: true };
+      }
+      // Предотвращаем ошибки консоли
+      if (!window.console) {
+        window.console = { log: function() {}, error: function() {}, warn: function() {} };
       }
     </script>
     %sveltekit.head%
