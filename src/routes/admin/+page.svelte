@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import type { User, StarTransaction } from '$lib/types';
   
-  // Состояние аутентификации
-  let isAuthenticated = false;
+  // Состояние аутентификации: теперь авторизация происходит через /admin/login и cookie
+  // Страница /admin защищена в +layout.server.ts, поэтому здесь показываем панель сразу
+  let isAuthenticated = true;
   let password = '';
   let authError = '';
   
@@ -74,39 +75,17 @@
   let isWalletModalOpen = false;
   let userDetailedData: any = null;
   
-  // Проверка пароля в localStorage
+  // При монтировании просто грузим статистику (авторизация уже проверена на сервере)
   onMount(() => {
-    const savedAuth = localStorage.getItem('admin_auth');
-    if (savedAuth) {
-      isAuthenticated = true;
-      password = savedAuth;
-      loadStats();
-    }
+    loadStats();
   });
   
-  async function handleLogin() {
-    if (!password) {
-      authError = 'Введите пароль';
-      return;
-    }
-    
-    // Простая проверка пароля (можно заменить на серверную проверку)
-    const ADMIN_PASSWORD = '2282211q'; // Пароль администратора
-    
-    if (password === ADMIN_PASSWORD) {
-      isAuthenticated = true;
-      authError = '';
-      localStorage.setItem('admin_auth', password);
-      loadStats();
-    } else {
-      authError = 'Неверный пароль';
-    }
-  }
+  // Логин теперь осуществляется на странице /admin/login
+  async function handleLogin() {}
   
   function handleLogout() {
-    isAuthenticated = false;
-    password = '';
-    localStorage.removeItem('admin_auth');
+    // Выходим через серверный маршрут, cookie очищается на бэке
+    window.location.href = '/admin/logout';
   }
   
   async function loadStats() {
