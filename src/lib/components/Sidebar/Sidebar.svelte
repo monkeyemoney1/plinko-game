@@ -131,6 +131,17 @@
     { value: RiskLevel.HIGH, label: 'Высокий' },
   ];
   const rowCounts = rowCountOptions.map((value) => ({ value, label: value.toString() }));
+
+  // Debug UI: управление слабым "тяготением к центру"
+  let debugCenterForce = $state(false);
+  let debugCenterForceK = $state(0.000002);
+  function toggleDebugCenterForce() {
+    debugCenterForce = !debugCenterForce;
+    $plinkoEngine?.enableDebugCenterForce?.(debugCenterForce);
+  }
+  function applyDebugCenterForceK() {
+    $plinkoEngine?.setDebugCenterForceK?.(Number(debugCenterForceK));
+  }
 </script>
 
 <div class="flex flex-col gap-5 bg-slate-700 p-3 lg:max-w-80">
@@ -297,6 +308,21 @@
           >
             Профиль
           </button>
+          <!-- Debug center force controls (только для теста) -->
+          <div class="hidden md:flex items-center gap-2 bg-slate-800/70 rounded px-2 py-1">
+            <label class="text-xs text-slate-300">CenterForce</label>
+            <button
+              class={twMerge('text-xs px-2 py-1 rounded', debugCenterForce ? 'bg-red-500 text-white' : 'bg-slate-600 text-slate-200')}
+              onclick={toggleDebugCenterForce}
+            >{debugCenterForce ? 'ON' : 'OFF'}</button>
+            <input
+              class="w-24 rounded bg-slate-900 text-white text-xs px-2 py-1"
+              type="number"
+              step="0.000001"
+              bind:value={debugCenterForceK}
+              onchange={applyDebugCenterForceK}
+            />
+          </div>
           <button
             class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold text-sm transition-colors"
             onclick={async () => {
