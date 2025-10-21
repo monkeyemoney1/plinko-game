@@ -154,12 +154,16 @@ export const POST: RequestHandler = async ({ request }) => {
         
         // Отправляем транзакцию в блокчейн TON через стабильный helper
         const network = privateEnv.TON_NETWORK || 'mainnet';
-        const apiKey = privateEnv.TONCENTER_API_KEY || privateEnv.TON_API_KEY || '';
+        const apiKey = privateEnv.TONCENTER_API_KEY || privateEnv.TON_API_KEY;
         const endpoint = privateEnv.TONCENTER_ENDPOINT;
         const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
 
         if (!mnemonic) {
           throw new Error('Wallet mnemonic is not configured');
+        }
+        
+        if (!apiKey) {
+          throw new Error('TON API key is not configured (TONCENTER_API_KEY or TON_API_KEY required)');
         }
 
         const tonClient = ton.createTonClient({ network, apiKey, endpoint });
