@@ -8,6 +8,7 @@ import {
   shouldAutoProcess,
   requiresManualReview
 } from '$lib/config/withdrawals';
+import { sendTonTransfer } from '$lib/server/ton-transfer';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
@@ -138,39 +139,107 @@ export const POST: RequestHandler = async ({ request }) => {
 
       console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${feeInfo.grossAmount} TON (net: ${feeInfo.netAmount}, fee: ${feeInfo.fee})`);
 
-      const responseData = {
-        success: true,
-        withdrawal: {
-          id: withdrawalId,
-          user_id,
-          gross_amount: feeInfo.grossAmount,
-          net_amount: feeInfo.netAmount,
-          fee: feeInfo.fee,
-          wallet_address,
-          status,
-          auto_process: shouldAutoProcess(withdrawAmount),
-          created_at: withdrawalResult.rows[0].created_at
-        },
-        message: status === WITHDRAWAL_CONFIG.STATUSES.MANUAL_REVIEW 
-          ? 'Заявка создана и отправлена на ручную проверку'
-          : 'Заявка создана и ожидает обработки'
-      };
-
-      // Если включена автообработка, запускаем её
-      if (shouldAutoProcess(withdrawAmount) && status === WITHDRAWAL_CONFIG.STATUSES.PENDING) {
-        // Запускаем автообработку асинхронно
-        fetch('/api/withdrawals/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ withdrawal_id: withdrawalId })
-        }).catch(err => {
-          console.error('Auto-process failed:', err);
-        });
+      // Немедленно отправляем средства через блокчейн
+      console.log(`[Withdrawal ${withdrawalId}] Starting automatic TON transfer...`);
+      
+      await client.query('BEGIN');
+      
+      try {
+        // Обновляем статус на "в обработке"
+        await client.query(
+          'UPDATE withdrawals SET status = $1 WHERE id = $2',
+          [WITHDRAWAL_CONFIG.STATUSES.PROCESSING, withdrawalId]
+        );
         
-        responseData.message = 'Заявка создана и отправлена на автоматическую обработку';
+        await client.query('COMMIT');
+        
+        // Отправляем транзакцию в блокчейн TON
+        const transferResult = await sendTonTransfer(wallet_address, feeInfo.netAmount);
+        
+        await client.query('BEGIN');
+        
+        if (transferResult.success) {
+          // Успешная отправка - обновляем статус на "завершено"
+          await client.query(
+            `UPDATE withdrawals 
+             SET status = $1, 
+                 transaction_hash = $2, 
+                 completed_at = NOW() 
+             WHERE id = $3`,
+            [WITHDRAWAL_CONFIG.STATUSES.COMPLETED, transferResult.txHash, withdrawalId]
+          );
+          
+          await client.query('COMMIT');
+          
+          console.log(`[Withdrawal ${withdrawalId}] Successfully completed! TX: ${transferResult.txHash}`);
+          
+          return json({
+            success: true,
+            withdrawal: {
+              id: withdrawalId,
+              user_id,
+              gross_amount: feeInfo.grossAmount,
+              net_amount: feeInfo.netAmount,
+              fee: feeInfo.fee,
+              wallet_address,
+              status: WITHDRAWAL_CONFIG.STATUSES.COMPLETED,
+              transaction_hash: transferResult.txHash,
+              created_at: withdrawalResult.rows[0].created_at
+            },
+            message: `Средства успешно отправлены! Сумма: ${feeInfo.netAmount} TON`
+          });
+          
+        } else {
+          // Ошибка отправки - обновляем статус на "ошибка" и возвращаем средства
+          await client.query(
+            `UPDATE withdrawals 
+             SET status = $1, 
+                 error_message = $2 
+             WHERE id = $3`,
+            [WITHDRAWAL_CONFIG.STATUSES.FAILED, transferResult.error, withdrawalId]
+          );
+          
+          // Возвращаем средства на баланс пользователя
+          await client.query(
+            'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
+            [feeInfo.grossAmount, user_id]
+          );
+          
+          await client.query('COMMIT');
+          
+          console.error(`[Withdrawal ${withdrawalId}] Failed: ${transferResult.error}`);
+          
+          return json({
+            success: false,
+            error: `Ошибка отправки средств: ${transferResult.error}. Средства возвращены на баланс.`
+          }, { status: 500 });
+        }
+        
+      } catch (processError) {
+        await client.query('ROLLBACK');
+        
+        // При ошибке обработки возвращаем средства
+        await client.query('BEGIN');
+        await client.query(
+          `UPDATE withdrawals 
+           SET status = $1, 
+               error_message = $2 
+           WHERE id = $3`,
+          [WITHDRAWAL_CONFIG.STATUSES.FAILED, String(processError), withdrawalId]
+        );
+        await client.query(
+          'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
+          [feeInfo.grossAmount, user_id]
+        );
+        await client.query('COMMIT');
+        
+        console.error(`[Withdrawal ${withdrawalId}] Processing error:`, processError);
+        
+        return json({
+          success: false,
+          error: 'Ошибка обработки вывода. Средства возвращены на баланс.'
+        }, { status: 500 });
       }
-
-      return json(responseData);
 
     } catch (dbError) {
       await client.query('ROLLBACK');

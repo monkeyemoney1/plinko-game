@@ -10,8 +10,8 @@ export const WITHDRAWAL_CONFIG = {
   MAX_DAILY_COUNT: 10, // Максимальное количество выводов в день на пользователя
 
   // Комиссии
-  FIXED_FEE: 0.01, // Фиксированная комиссия в TON
-  PERCENTAGE_FEE: 0.02, // Процентная комиссия (2%)
+  FIXED_FEE: 0.05, // Фиксированная комиссия в TON
+  PERCENTAGE_FEE: 0, // Процентная комиссия (отключена)
   
   // Временные ограничения
   PROCESSING_TIMEOUT: 300000, // 5 минут на обработку
@@ -19,8 +19,8 @@ export const WITHDRAWAL_CONFIG = {
   
   // Автоматическая обработка
   AUTO_PROCESS_ENABLED: true,
-  AUTO_PROCESS_THRESHOLD: 10, // Автообработка для сумм до 10 TON
-  MANUAL_REVIEW_THRESHOLD: 50, // Ручная проверка для сумм от 50 TON
+  AUTO_PROCESS_THRESHOLD: 999999, // Автообработка для всех сумм
+  MANUAL_REVIEW_THRESHOLD: 999999, // Ручная проверка отключена
   
   // Безопасность
   REQUIRE_2FA: false, // Требовать двухфакторную аутентификацию
@@ -48,8 +48,8 @@ export function calculateWithdrawalFee(amount: number): {
   netAmount: number;
   grossAmount: number;
 } {
-  const percentageFee = amount * WITHDRAWAL_CONFIG.PERCENTAGE_FEE;
-  const totalFee = Math.max(WITHDRAWAL_CONFIG.FIXED_FEE, percentageFee);
+  // Фиксированная комиссия 0.05 TON
+  const totalFee = WITHDRAWAL_CONFIG.FIXED_FEE;
   
   return {
     fee: totalFee,
