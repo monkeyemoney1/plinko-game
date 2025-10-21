@@ -1,12 +1,12 @@
 import { json } from '@sveltejs/kit';
 import { pool } from '$lib/db';
 import { env as privateEnv } from '$env/dynamic/private';
+import { sendAdminMessage } from '$lib/telegram/botAPI';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ton = require(process.cwd() + '/server/ton-helper.cjs');
 
 // Получаем переменные окружения динамически
-const GAME_WALLET_ADDRESS = privateEnv.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
 const TONAPI_KEY = privateEnv.TON_API_KEY || '';
 
 export const POST = async ({ request }) => {
@@ -69,19 +69,30 @@ export const POST = async ({ request }) => {
           }
           // Логируем адреса отправителя и получателя (user-friendly mainnet)
           const senderAddr = sender.contract.address.toString({ bounceable: false, testOnly: false, urlSafe: true });
+          // Фиксированная комиссия 0.1 TON
+          const WITHDRAWAL_FEE_TON = 0.1;
+          const amountTon = parseFloat(withdrawal.amount);
+          const sendAmountTon = Math.max(amountTon - WITHDRAWAL_FEE_TON, 0);
+
           console.log('[TON WITHDRAW]', {
             from: senderAddr,
             to: normalizedAddress,
-            amount: withdrawal.amount
+            amount_requested: amountTon,
+            fee: WITHDRAWAL_FEE_TON,
+            amount_to_send: sendAmountTon
           });
-          await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+          if (sendAmountTon <= 0) {
+            throw new Error('Net withdrawal amount is zero or negative after fee');
+          }
+          await ton.sendTon(tonClient, sender, normalizedAddress, sendAmountTon, `Withdrawal ${withdrawal.id} (net)`);
           const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
           if (!confirmed) {
             throw new Error('Seqno confirmation timeout');
           }
           let realTxHash = null;
           try {
-            const txApiUrl = `https://tonapi.io/v2/blockchain/accounts/${GAME_WALLET_ADDRESS}/transactions?limit=10`;
+            const accountForLookup = senderAddr; // использовать адрес, вычисленный из сид-фразы
+            const txApiUrl = `https://tonapi.io/v2/blockchain/accounts/${accountForLookup}/transactions?limit=10`;
             const txApiRes = await fetch(txApiUrl, {
               headers: {
                 'Authorization': `Bearer ${apiKey}`,
@@ -96,7 +107,7 @@ export const POST = async ({ request }) => {
                     for (const out of tx.out_msgs) {
                       if (
                         out.destination === withdrawal.wallet_address &&
-                        Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
+                        Math.abs(parseFloat(out.value) / 1e9 - sendAmountTon) < 0.01
                       ) {
                         realTxHash = tx.hash;
                         break;
@@ -123,6 +134,12 @@ export const POST = async ({ request }) => {
           [txHashOrRef, withdrawal.id]
         );
         await client.query('COMMIT');
+        // Notify admin success
+        try {
+          const fee = 0.1;
+          const net = Math.max(parseFloat(withdrawal.amount) - fee, 0);
+          await sendAdminMessage(`✅ Вывод выполнен\nID: ${withdrawal.id}\nUser: ${withdrawal.user_id}\nAmount: ${withdrawal.amount} TON\nFee: ${fee} TON\nNet: ${net} TON\nTo: ${withdrawal.wallet_address}\nTx: ${txHashOrRef}`);
+        } catch {}
         return json({
           success: true,
           withdrawal: {
@@ -130,6 +147,8 @@ export const POST = async ({ request }) => {
             status: 'completed',
             transaction_hash: txHashOrRef,
             amount: withdrawal.amount,
+            fee: 0.1,
+            net_amount: Math.max(parseFloat(withdrawal.amount) - 0.1, 0),
             wallet_address: withdrawal.wallet_address
           },
           message: 'Withdrawal completed successfully!'
@@ -141,6 +160,10 @@ export const POST = async ({ request }) => {
           [withdrawal.id]
         );
         await client.query('COMMIT');
+        // Notify admin failure
+        try {
+          await sendAdminMessage(`❌ Ошибка вывода\nID: ${withdrawal.id}\nUser: ${withdrawal.user_id}\nAmount: ${withdrawal.amount} TON\nTo: ${withdrawal.wallet_address}\nFunds refunded to balance`);
+        } catch {}
         return json({
           success: false,
           error: 'Transaction failed. Funds returned to your balance.',

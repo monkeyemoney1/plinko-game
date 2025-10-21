@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { pool } from '$lib/db';
+import { env as privateEnv } from '$env/dynamic/private';
+import { sendAdminMessage } from '$lib/telegram/botAPI';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
@@ -22,18 +24,42 @@ export const POST: RequestHandler = async ({ request }) => {
       }, { status: 400 });
     }
 
-    // Минимальная сумма вывода
-    const MIN_WITHDRAWAL = 0.1; // 0.1 TON
-    if (withdrawAmount < MIN_WITHDRAWAL) {
+    // Комиссия на вывод и минимальная сумма
+    const WITHDRAWAL_FEE_TON = 0.1; // фиксированная комиссия 0.1 TON
+    // Требуем, чтобы пользователь выводил сумму строго больше комиссии, иначе на руки придет 0 или меньше
+    if (withdrawAmount <= WITHDRAWAL_FEE_TON) {
       return json({ 
         success: false, 
-        error: `Minimum withdrawal amount is ${MIN_WITHDRAWAL} TON` 
+        error: `Minimum withdrawal amount is > ${WITHDRAWAL_FEE_TON} TON (fee ${WITHDRAWAL_FEE_TON} TON)` 
       }, { status: 400 });
     }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // Hidden daily limit per user
+      const DAILY_LIMIT = parseFloat(privateEnv.WITHDRAWAL_DAILY_LIMIT_TON || '5');
+      const dailySumRes = await client.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM withdrawals
+         WHERE user_id = $1
+           AND created_at >= NOW() - INTERVAL '1 day'
+           AND status IN ('pending','processing','completed')`,
+        [user_id]
+      );
+      const spentToday = parseFloat(dailySumRes.rows[0].total);
+      if (spentToday + withdrawAmount > DAILY_LIMIT) {
+        // Notify admin silently
+        sendAdminMessage(
+          `🚫 Попытка превышения лимита вывода\nUser: ${user_id}\nRequested: ${withdrawAmount} TON\nSpent today: ${spentToday} TON\nLimit: ${DAILY_LIMIT} TON\nAddress: ${wallet_address}`
+        ).catch(() => {});
+        await client.query('ROLLBACK');
+        return json({
+          success: false,
+          error: 'Withdrawal temporarily unavailable. Please try again later.'
+        }, { status: 429 });
+      }
 
       // Проверяем баланс пользователя
       const userResult = await client.query(
@@ -78,6 +104,12 @@ export const POST: RequestHandler = async ({ request }) => {
       await client.query('COMMIT');
 
       console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${withdrawAmount} TON`);
+      // Notify admin about new withdrawal request
+      const fee = WITHDRAWAL_FEE_TON;
+      const net = Math.max(withdrawAmount - fee, 0);
+      sendAdminMessage(
+        `🆕 Новый запрос на вывод\nID: ${withdrawalId}\nUser: ${user_id}\nAmount: ${withdrawAmount} TON\nFee: ${fee} TON\nNet: ${net} TON\nTo: ${wallet_address}`
+      ).catch(() => {});
 
       return json({
         success: true,
@@ -85,6 +117,8 @@ export const POST: RequestHandler = async ({ request }) => {
           id: withdrawalId,
           user_id,
           amount: withdrawAmount,
+          fee: WITHDRAWAL_FEE_TON,
+          net_amount: Math.max(withdrawAmount - WITHDRAWAL_FEE_TON, 0),
           wallet_address,
           status: 'pending',
           created_at: withdrawalResult.rows[0].created_at

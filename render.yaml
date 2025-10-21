@@ -7,14 +7,19 @@ services:
     startCommand: pnpm start
     envVars:
       - key: NODE_ENV
-        value: production
-      - key: TON_NETWORK
-        value: testnet
+      - key: GAME_WALLET_MNEMONIC
+        sync: false
+      - key: GAME_WALLET_ADDRESS
+        sync: false
       - key: TON_API_KEY
         value: AEBE4GOFFSWC2MAAAAAFVZ24DO3WJWH7IKYUQDS2EF6UAIS2ULVW5XDB4YU3VQYHPGHIC6A
       - key: TELEGRAM_BOT_TOKEN
-        value: 8401593144:AAHIzxiGfGlZ2GQ8h8Y6y-W_9ZPxqCupGIU
+        sync: false
       - key: SESSION_SECRET
+      - key: TELEGRAM_ADMIN_CHAT_ID
+        sync: false
+      - key: WITHDRAWAL_DAILY_LIMIT_TON
+        value: 5
         generateValue: true
       - key: PROMETHEUS_ENABLED
         value: false

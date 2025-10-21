@@ -2,9 +2,17 @@
  * Утилиты для работы с Telegram Bot API
  * Проверка Stars баланса, создание и подтверждение платежей
  */
+import { env as privateEnv } from '$env/dynamic/private';
 
-export const BOT_TOKEN = '8401593144:AAHIzxiGfGlZ2GQ8h8Y6y-W_9ZPxqCupGIU';
-export const BOT_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
+function getBotToken(): string {
+  const token = privateEnv.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not set');
+  return token;
+}
+
+function getBotApiUrl(): string {
+  return `https://api.telegram.org/bot${getBotToken()}`;
+}
 
 export interface TelegramBotUser {
   id: number;
@@ -29,7 +37,7 @@ export interface StarTransaction {
  */
 async function makeBotAPIRequest(method: string, params: any = {}): Promise<any> {
   try {
-    const url = `${BOT_API_URL}/${method}`;
+    const url = `${getBotApiUrl()}/${method}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -281,6 +289,26 @@ export async function sendPaymentSuccessNotification(
     
   } catch (error) {
     console.error('Ошибка отправки уведомления о пополнении:', error);
+  }
+}
+
+/**
+ * Отправка произвольного сообщения администратору (чат из TELEGRAM_ADMIN_CHAT_ID)
+ */
+export async function sendAdminMessage(text: string): Promise<void> {
+  const adminChat = privateEnv.TELEGRAM_ADMIN_CHAT_ID;
+  if (!adminChat) {
+    console.warn('TELEGRAM_ADMIN_CHAT_ID is not set; admin message skipped');
+    return;
+  }
+  try {
+    await makeBotAPIRequest('sendMessage', {
+      chat_id: adminChat, // может быть числом или @username
+      text,
+      parse_mode: 'HTML'
+    });
+  } catch (e) {
+    console.error('Не удалось отправить сообщение администратору:', e);
   }
 }
 
