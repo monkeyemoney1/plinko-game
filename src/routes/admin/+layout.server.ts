@@ -1,4 +1,5 @@
-import { redirect, type LayoutServerLoad } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
+import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ url, cookies }) => {
   const authed = cookies.get('admin_auth') === '1';
