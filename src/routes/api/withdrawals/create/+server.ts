@@ -155,23 +155,56 @@ export const POST: RequestHandler = async ({ request }) => {
         // Отправляем транзакцию в блокчейн TON через стабильный helper
         const network = privateEnv.TON_NETWORK || 'mainnet';
         const apiKey = privateEnv.TON_API_KEY || privateEnv.TONCENTER_API_KEY;
-        const endpoint = network === 'mainnet' 
-          ? 'https://toncenter.com/api/v2/jsonRPC'
-          : 'https://testnet.toncenter.com/api/v2/jsonRPC';
+        
+        // Для mainnet можем попробовать без API ключа или с альтернативным endpoint
+        let endpoint: string;
+        let finalApiKey: string | undefined = apiKey;
+        
+        if (network === 'mainnet') {
+          // Попробуем сначала основной endpoint
+          endpoint = 'https://toncenter.com/api/v2/jsonRPC';
+          // Если API ключ есть но не работает, попробуем публичный endpoint без ключа
+          if (!apiKey) {
+            console.log(`[Withdrawal ${withdrawalId}] No API key for mainnet, using public endpoint`);
+            endpoint = 'https://tonapi.io/v2/jsonRPC';
+            finalApiKey = undefined;
+          }
+        } else {
+          endpoint = 'https://testnet.toncenter.com/api/v2/jsonRPC';
+        }
+        
         const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
 
         if (!mnemonic) {
           throw new Error('Wallet mnemonic is not configured');
         }
-        
-        if (!apiKey) {
-          throw new Error('TON API key is not configured (TON_API_KEY or TONCENTER_API_KEY required)');
-        }
 
         console.log(`[Withdrawal ${withdrawalId}] Using network: ${network}, endpoint: ${endpoint}`);
+        console.log(`[Withdrawal ${withdrawalId}] API key configured: ${finalApiKey ? 'YES' : 'NO'}`);
+        console.log(`[Withdrawal ${withdrawalId}] Mnemonic configured: ${mnemonic ? 'YES' : 'NO'}`);
 
-        const tonClient = ton.createTonClient({ network, apiKey, endpoint });
-        const sender = await ton.openGameWallet(tonClient, mnemonic);
+        let tonClient, sender;
+        
+        try {
+          tonClient = ton.createTonClient({ network, apiKey: finalApiKey, endpoint });
+          console.log(`[Withdrawal ${withdrawalId}] TON client created successfully`);
+          
+          sender = await ton.openGameWallet(tonClient, mnemonic);
+          console.log(`[Withdrawal ${withdrawalId}] Game wallet opened successfully`);
+        } catch (clientError) {
+          // Если не удалось с API ключом, попробуем без него
+          if (finalApiKey && network === 'mainnet') {
+            console.warn(`[Withdrawal ${withdrawalId}] Failed with API key, trying without:`, clientError instanceof Error ? clientError.message : String(clientError));
+            finalApiKey = undefined;
+            endpoint = 'https://toncenter.com/api/v2/jsonRPC';
+            
+            tonClient = ton.createTonClient({ network, apiKey: finalApiKey, endpoint });
+            sender = await ton.openGameWallet(tonClient, mnemonic);
+            console.log(`[Withdrawal ${withdrawalId}] Successfully connected without API key`);
+          } else {
+            throw clientError;
+          }
+        }
 
         // Проверим баланс кошелька (не блокируем, только информируем)
         try {
@@ -179,11 +212,22 @@ export const POST: RequestHandler = async ({ request }) => {
           const balance = await sender.contract.getBalance();
           const balTon = parseFloat(mod.fromNano(balance));
           console.log(`[Withdrawal ${withdrawalId}] Game wallet balance: ${balTon} TON`);
-        } catch {}
+          
+          if (balTon < feeInfo.netAmount + 0.1) {
+            console.warn(`[Withdrawal ${withdrawalId}] Warning: Low wallet balance. Required: ${feeInfo.netAmount}, Available: ${balTon}`);
+          }
+        } catch (balanceError) {
+          console.warn(`[Withdrawal ${withdrawalId}] Could not check wallet balance:`, balanceError instanceof Error ? balanceError.message : String(balanceError));
+        }
 
         const beforeSeqno = await sender.contract.getSeqno();
+        console.log(`[Withdrawal ${withdrawalId}] Current wallet seqno: ${beforeSeqno}, sending ${feeInfo.netAmount} TON to ${wallet_address}`);
+        
         await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
+        console.log(`[Withdrawal ${withdrawalId}] Transaction sent, waiting for confirmation...`);
+        
         const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+        console.log(`[Withdrawal ${withdrawalId}] Transaction confirmed: ${confirmed}`);
 
         await client.query('BEGIN');
         
