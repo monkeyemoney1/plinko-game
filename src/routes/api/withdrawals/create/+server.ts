@@ -26,12 +26,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
     // Комиссия на вывод и минимальная сумма
     const WITHDRAWAL_FEE_TON = 0.1; // фиксированная комиссия 0.1 TON
-    // Разрешаем вывод 0.1 TON (user получит 0, но это может быть намеренным тестом)
-    // Минимум теперь включает сумму комиссии, а не больше неё
-    if (withdrawAmount < WITHDRAWAL_FEE_TON) {
+    const MIN_WITHDRAWAL_TON = 0.11; // минимум 0.11 TON чтобы пользователь получил хотя бы 0.01 TON
+    if (withdrawAmount < MIN_WITHDRAWAL_TON) {
       return json({ 
         success: false, 
-        error: `Minimum withdrawal amount is ${WITHDRAWAL_FEE_TON} TON (includes fee)` 
+        error: `Minimum withdrawal amount is ${MIN_WITHDRAWAL_TON} TON (fee ${WITHDRAWAL_FEE_TON} TON)` 
       }, { status: 400 });
     }
 

@@ -79,6 +79,7 @@
   let starsDepositAmount = 0;
   let withdrawAmount = 0;
   const WITHDRAWAL_FEE_TON = 0.1; // фиксированная комиссия
+  const MIN_WITHDRAWAL_TON = 0.11; // минимум с учетом комиссии
   let transactions = [];
   function handleStarsDeposit() {
     isStarsDepositModalOpen = true;
@@ -391,8 +392,8 @@
       alert('Сумма должна быть больше 0');
       return;
     }
-    if (withdrawAmount < WITHDRAWAL_FEE_TON) {
-      alert(`Минимальная сумма вывода ${WITHDRAWAL_FEE_TON} TON (включая комиссию)`);
+    if (withdrawAmount < MIN_WITHDRAWAL_TON) {
+      alert(`Минимальная сумма вывода ${MIN_WITHDRAWAL_TON} TON (комиссия ${WITHDRAWAL_FEE_TON} TON)`);
       return;
     }
     
@@ -603,9 +604,10 @@
             <input type="number" min="0" step="0.01" bind:value={withdrawAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center mb-3" placeholder="Сумма для вывода" />
             <div class="text-xs text-gray-400 mt-1 text-center">Комиссия: {WITHDRAWAL_FEE_TON} TON</div>
             <div class="text-xs text-gray-300 mt-1 text-center">Вы получите: {Math.max((Number(withdrawAmount)||0) - WITHDRAWAL_FEE_TON, 0).toFixed(4)} TON</div>
+            <div class="text-xs text-gray-500 mt-1 text-center">Минимум: {MIN_WITHDRAWAL_TON} TON</div>
             <div class="text-xs text-gray-400 mt-2 text-center">Доступно: {tonBalance} TON</div>
           </div>
-          <button class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl font-semibold disabled:opacity-50" onclick={processWithdraw} disabled={withdrawAmount < WITHDRAWAL_FEE_TON}>
+          <button class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl font-semibold disabled:opacity-50" onclick={processWithdraw} disabled={withdrawAmount < MIN_WITHDRAWAL_TON}>
             Вывести
           </button>
         </div>
