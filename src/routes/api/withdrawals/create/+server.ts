@@ -59,14 +59,7 @@ export const POST: RequestHandler = async ({ request }) => {
       const accountAge = Date.now() - new Date(user.created_at).getTime();
       const accountAgeHours = accountAge / (1000 * 60 * 60);
 
-      // Проверяем возраст аккаунта
-      if (accountAgeHours < WITHDRAWAL_CONFIG.MIN_ACCOUNT_AGE_HOURS) {
-        await client.query('ROLLBACK');
-        return json({ 
-          success: false, 
-          error: `Вывод доступен через ${Math.ceil(WITHDRAWAL_CONFIG.MIN_ACCOUNT_AGE_HOURS - accountAgeHours)} часов после регистрации` 
-        }, { status: 400 });
-      }
+      // Проверка возраста аккаунта отключена (MIN_ACCOUNT_AGE_HOURS = 0)
 
       // Получаем статистику выводов за сегодня
       const today = new Date();
@@ -265,7 +258,7 @@ export const POST: RequestHandler = async ({ request }) => {
         
         return json({
           success: false,
-          error: 'Ошибка обработки вывода. Средства возвращены на баланс.'
+          error: `Ошибка обработки вывода: ${processError instanceof Error ? processError.message : String(processError)}. Средства возвращены на баланс.`
         }, { status: 500 });
       }
 

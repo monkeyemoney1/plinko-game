@@ -24,7 +24,7 @@ export const WITHDRAWAL_CONFIG = {
   
   // Безопасность
   REQUIRE_2FA: false, // Требовать двухфакторную аутентификацию
-  MIN_ACCOUNT_AGE_HOURS: 24, // Минимальный возраст аккаунта для вывода
+  MIN_ACCOUNT_AGE_HOURS: 0, // Минимальный возраст аккаунта для вывода отключен
   MIN_DEPOSIT_BEFORE_WITHDRAWAL: 0.05, // Минимальный депозит перед выводом
   
   // Статусы
