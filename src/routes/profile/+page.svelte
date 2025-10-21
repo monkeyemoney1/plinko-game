@@ -642,5 +642,23 @@
     <div class="flex justify-end mt-4">
   <button class="bg-red-500 text-white px-4 py-2 rounded-xl" onclick={logout}>Выйти</button>
 </div>
+
+    <!-- Поддержка/Support: ссылка в самом низу окна профиля -->
+    <div class="w-full mt-6">
+      <div aria-hidden="true" class="h-[1px] bg-slate-700"></div>
+      <div class="flex items-center justify-between p-2">
+        <div class="text-sm text-slate-500">
+          <a
+            href="https://t.me/PlinkoStars_Support"
+            target="_blank"
+            rel="noreferrer"
+            class="flex items-center gap-1 text-cyan-600 transition hover:text-cyan-500"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="inline-block align-middle"><path d="M12 2C6.477 2 2 6.477 2 12c0 5.523 4.477 10 10 10s10-4.477 10-10c0-5.523-4.477-10-10-10zm4.93 7.31l-1.43 6.77c-.11.49-.4.61-.81.38l-2.25-1.66-1.09 1.05c-.12.12-.23.23-.47.23l.17-2.39 4.35-3.93c.19-.17-.04-.27-.29-.1l-5.38 3.39-2.32-.73c-.5-.16-.51-.5.1-.73l9.06-3.5c.42-.16.79.1.66.72z"/></svg>
+            <span>Поддержка/Support</span>
+          </a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
