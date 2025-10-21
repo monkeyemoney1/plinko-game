@@ -289,7 +289,7 @@
   </div>
 
   <div class="mt-auto pt-5">
-    <div class="flex items-center gap-4 border-t border-slate-600 pt-3">
+  <div class="flex items-center flex-wrap gap-2 border-t border-slate-600 pt-3">
       <Tooltip.Provider delayDuration={0} disableCloseOnTriggerClick>
         <!-- Live Stats Button + Logout Button -->
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -309,14 +309,14 @@
             Профиль
           </button>
           <!-- Debug center force controls (только для теста) -->
-          <div class="hidden md:flex items-center gap-2 bg-slate-800/70 rounded px-2 py-1">
+          <div class="flex items-center gap-2 bg-slate-800/70 rounded px-2 py-1 max-w-full">
             <label class="text-xs text-slate-300">CenterForce</label>
             <button
               class={twMerge('text-xs px-2 py-1 rounded', debugCenterForce ? 'bg-red-500 text-white' : 'bg-slate-600 text-slate-200')}
               onclick={toggleDebugCenterForce}
             >{debugCenterForce ? 'ON' : 'OFF'}</button>
             <input
-              class="w-24 rounded bg-slate-900 text-white text-xs px-2 py-1"
+              class="w-24 sm:w-28 rounded bg-slate-900 text-white text-xs px-2 py-1"
               type="number"
               step="0.000001"
               bind:value={debugCenterForceK}
