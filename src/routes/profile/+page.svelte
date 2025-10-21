@@ -520,14 +520,11 @@
         <span class="text-gray-300">Баланс ⭐️Stars:</span>
     <span class="font-bold text-yellow-400 flex items-center gap-1">
       {Number($balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ⭐️
-      <button class="ml-1 bg-slate-700 hover:bg-slate-600 text-cyan-400 rounded-full px-2 py-0.5 text-xs flex items-center" style="height:1.5em;" title="Пополнить Stars" onclick={handleStarsDeposit}>
-        +
-      </button>
     {#if isStarsDepositModalOpen}
       <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
         <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xs flex flex-col items-center relative">
           <button class="absolute top-2 right-2 text-gray-400 hover:text-white text-xl" onclick={closeStarsDepositModal}>&times;</button>
-          <img src="https://upload.wikimedia.org/wikipedia/commons/6/6c/TON_symbol.png" alt="Stars" class="w-16 h-16 mb-4" />
+          <img src="/ton_symbol (1).png" alt="Stars" class="w-16 h-16 mb-4" />
           <div class="text-yellow-400 text-lg font-bold mb-4">Пополнение Stars</div>
           <div class="w-full mb-4">
             <input type="number" min="0" step="0.01" bind:value={starsDepositAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center" placeholder="Сумма для пополнения" />
@@ -572,7 +569,7 @@
       <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
   <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xs flex flex-col items-center relative">
           <button class="absolute top-2 right-2 text-gray-400 hover:text-white text-xl" onclick={closeDepositModal}>&times;</button>
-          <img src="https://upload.wikimedia.org/wikipedia/commons/6/6c/TON_symbol.png" alt="TON" class="w-16 h-16 mb-4" />
+          <img src="/ton_symbol (1).png" alt="TON" class="w-16 h-16 mb-4" />
           <div class="text-white text-lg font-bold mb-4">Пополнение TON</div>
           <div class="w-full mb-4">
             <input type="number" min="0" step="0.01" bind:value={depositAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center" placeholder="Сумма для пополнения" />
@@ -600,7 +597,7 @@
       <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
   <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xs flex flex-col items-center relative">
           <button class="absolute top-2 right-2 text-gray-400 hover:text-white text-xl" onclick={closeWithdrawModal}>&times;</button>
-          <img src="https://upload.wikimedia.org/wikipedia/commons/6/6c/TON_symbol.png" alt="TON" class="w-16 h-16 mb-4" />
+          <img src="/ton_symbol (1).png" alt="TON" class="w-16 h-16 mb-4" />
           <div class="text-white text-lg font-bold mb-4">Вывод TON</div>
           <div class="w-full mb-4">
             <input type="number" min="0" step="0.01" bind:value={withdrawAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center mb-3" placeholder="Сумма для вывода" />
