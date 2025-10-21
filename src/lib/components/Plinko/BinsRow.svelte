@@ -46,20 +46,6 @@
 
     animation.play();
   }
-
-  // Тестовая аналитика: счётчики и проценты попаданий по ячейкам для текущего количества рядов
-  let binCounts: number[] = $state([]);
-  let binPercents: number[] = $state([]);
-  $effect(() => {
-    const records = $winRecords.filter((r) => r.rowCount === $rowCount && r.riskLevel === $riskLevel);
-    const bins = Array($rowCount + 1).fill(0);
-    for (const r of records) {
-      if (r.binIndex >= 0 && r.binIndex < bins.length) bins[r.binIndex]++;
-    }
-    binCounts = bins;
-    const total = records.length || 0;
-    binPercents = bins.map((c) => (total ? (c / total) * 100 : 0));
-  });
 </script>
 
 <!-- Height clamping in mobile: From 10px at 370px viewport width to 16px at 600px viewport width -->
@@ -73,16 +59,11 @@
          -->
         <div
           use:initAnimation
-          class="relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-xs text-[clamp(6px,2.784px+0.87vw,8px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] lg:rounded-md lg:text-[clamp(10px,-16.944px+2.632vw,12px)] lg:shadow-[0_3px_var(--shadow-color)]"
+          class="flex min-w-0 flex-1 items-center justify-center rounded-xs text-[clamp(6px,2.784px+0.87vw,8px)] font-bold text-gray-950 shadow-[0_2px_var(--shadow-color)] lg:rounded-md lg:text-[clamp(10px,-16.944px+2.632vw,12px)] lg:shadow-[0_3px_var(--shadow-color)]"
           style:background-color={binColorsByRowCount[$rowCount].background[binIndex]}
           style:--shadow-color={binColorsByRowCount[$rowCount].shadow[binIndex]}
         >
-          <div>{payout}{payout < 100 ? '×' : ''}</div>
-          <div
-            class="absolute bottom-[2px] left-1/2 -translate-x-1/2 px-[6px] py-[1px] rounded-full text-[10px] font-semibold bg-black/35 text-white/95 backdrop-blur-sm lg:text-[11px]"
-          >
-            {(binCounts[binIndex] ?? 0)} • {(binPercents[binIndex] ?? 0).toFixed(1)}%
-          </div>
+          {payout}{payout < 100 ? '×' : ''}
         </div>
       {/each}
     </div>

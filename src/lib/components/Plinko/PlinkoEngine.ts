@@ -48,20 +48,6 @@ class PlinkoEngine {
   private runner: Matter.Runner;
 
   /**
-   * Debug: слабое тяготение шаров к центру по оси X.
-   * Полностью отключаемое/включаемое флагом.
-   */
-  private debugCenterForce = false;
-  /**
-   * Коэффициент силы центра. Очень маленький, чтобы не ломать физику.
-   */
-  private centerForceK = 0.000002;
-  /**
-   * Визуальная полоса по центру для отладки (не участвует в коллизиях).
-   */
-  private centerStripe: Matter.Body | null = null;
-
-  /**
    * Every pin of the game.
    */
   private pins: Matter.Body[] = [];
@@ -152,9 +138,6 @@ class PlinkoEngine {
 
     this.placePinsAndWalls();
 
-  // Визуальная центральная линия
-  this.createOrUpdateCenterStripe();
-
     this.sensor = Matter.Bodies.rectangle(
       this.canvas.width / 2,
       this.canvas.height,
@@ -177,23 +160,6 @@ class PlinkoEngine {
           this.handleBallEnterBin(bodyA);
         }
       });
-    });
-
-    // Debug-эффект тяготения к центру применяется до шага симуляции
-    Matter.Events.on(this.engine, 'beforeUpdate', () => {
-      if (!this.debugCenterForce || this.centerForceK <= 0) return;
-      const centerX = this.canvas.width / 2;
-      const k = this.centerForceK;
-      const bodies = Matter.Composite.allBodies(this.engine.world);
-      for (const body of bodies) {
-        if (body.collisionFilter.category !== PlinkoEngine.BALL_CATEGORY) continue;
-        // Сила только по X, растёт немного к низу экрана
-        const heightFactor = Math.min(1, Math.max(0, body.position.y / this.canvas.height));
-        const fx = (centerX - body.position.x) * k * heightFactor;
-        if (fx !== 0) {
-          Matter.Body.applyForce(body, body.position, { x: fx, y: 0 });
-        }
-      }
     });
   }
 
@@ -301,7 +267,6 @@ class PlinkoEngine {
           id: uuidv4(),
           betAmount,
           rowCount: this.rowCount,
-          riskLevel: this.riskLevel,
           binIndex,
           payout: {
             multiplier,
@@ -452,56 +417,6 @@ class PlinkoEngine {
     );
     this.walls.push(leftWall, rightWall);
     Matter.Composite.add(this.engine.world, this.walls);
-  }
-
-  /**
-   * Создаёт или обновляет центральную визуальную полосу. Не участвует в коллизиях.
-   */
-  private createOrUpdateCenterStripe() {
-    const x = this.canvas.width / 2;
-    const stripeWidth = 4;
-    const stripe = Matter.Bodies.rectangle(
-      x,
-      this.canvas.height / 2,
-      stripeWidth,
-      this.canvas.height,
-      {
-        isStatic: true,
-        isSensor: true,
-        collisionFilter: { category: 0x0004, mask: 0x0000 },
-        render: {
-          fillStyle: 'rgba(255,0,0,0.12)',
-          visible: this.debugCenterForce,
-        },
-      },
-    );
-
-    if (this.centerStripe) {
-      Matter.Composite.remove(this.engine.world, this.centerStripe);
-    }
-    this.centerStripe = stripe;
-    Matter.Composite.add(this.engine.world, stripe);
-  }
-
-  /** Enable/disable debug center force effect */
-  public enableDebugCenterForce(enabled: boolean) {
-    this.debugCenterForce = !!enabled;
-    if (this.centerStripe) this.centerStripe.render.visible = this.debugCenterForce;
-  }
-
-  /** Set debug center force coefficient k */
-  public setDebugCenterForceK(k: number) {
-    if (typeof k === 'number' && isFinite(k)) {
-      this.centerForceK = k;
-    }
-  }
-
-  public getDebugCenterForce(): boolean {
-    return this.debugCenterForce;
-  }
-
-  public getDebugCenterForceK(): number {
-    return this.centerForceK;
   }
 
   private removeAllBalls() {

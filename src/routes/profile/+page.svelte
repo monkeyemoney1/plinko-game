@@ -3,6 +3,7 @@
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
+  import { normalizeAddressClient } from '$lib/ton-utils';
   import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
 
   let tonConnectUI: TonConnectUI;
@@ -77,6 +78,7 @@
   let depositAmount = 0;
   let starsDepositAmount = 0;
   let withdrawAmount = 0;
+  const WITHDRAWAL_FEE_TON = 0.1; // фиксированная комиссия
   let transactions = [];
   function handleStarsDeposit() {
     isStarsDepositModalOpen = true;
@@ -110,7 +112,7 @@
     
     // Fallback: используем userId как telegram_id для тестирования
     if (!telegramId) {
-      telegramId = parseInt(userId) || 123456789; // Fallback ID для тестирования
+      telegramId = parseInt(userId || '0') || 123456789; // Fallback ID для тестирования
       console.log('Используем fallback Telegram ID:', telegramId);
     }
     
@@ -185,7 +187,7 @@
       // Fallback
       if (!telegramId) {
         const userId = localStorage.getItem('user_id');
-        telegramId = parseInt(userId) || 123456789;
+        telegramId = parseInt(userId || '0') || 123456789;
       }
       
       const res = await fetch('/api/payments/stars/verify', {
@@ -303,7 +305,7 @@
     }
   }
   
-  async function checkDepositStatus(userId, userAddress, verifyAmount) {
+  async function checkDepositStatus(userId: string, userAddress: string, verifyAmount: number) {
     const maxAttempts = 40; // Максимум 40 попыток (20 минут при проверке каждые 15 сек)
     let attempts = 0;
 
@@ -389,6 +391,10 @@
       alert('Сумма должна быть больше 0');
       return;
     }
+    if (withdrawAmount < WITHDRAWAL_FEE_TON) {
+      alert(`Минимальная сумма вывода ${WITHDRAWAL_FEE_TON} TON (включая комиссию)`);
+      return;
+    }
     
     if (withdrawAmount > tonBalance) {
       alert('Недостаточно средств на балансе');
@@ -428,7 +434,8 @@
       if (processRes.ok) {
         const processData = await processRes.json();
         if (processData.success) {
-          alert(`Вывод успешно выполнен!\nСумма: ${withdrawAmount} TON\nHash транзакции: ${processData.withdrawal.transaction_hash}`);
+          const net = Math.max(Number(withdrawAmount) - WITHDRAWAL_FEE_TON, 0);
+          alert(`Вывод успешно выполнен!\nСписано: ${withdrawAmount} TON\nКомиссия: ${WITHDRAWAL_FEE_TON} TON\nПолучено: ${net} TON\nHash: ${processData.withdrawal.transaction_hash}`);
           withdrawAmount = 0;
           loadBalance();
           closeWithdrawModal();
@@ -487,6 +494,7 @@
     margin: 0;
   }
   input[type="number"] {
+    appearance: textfield;
     -moz-appearance: textfield;
   }
 </style>
@@ -593,9 +601,11 @@
           <div class="text-white text-lg font-bold mb-4">Вывод TON</div>
           <div class="w-full mb-4">
             <input type="number" min="0" step="0.01" bind:value={withdrawAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center mb-3" placeholder="Сумма для вывода" />
+            <div class="text-xs text-gray-400 mt-1 text-center">Комиссия: {WITHDRAWAL_FEE_TON} TON</div>
+            <div class="text-xs text-gray-300 mt-1 text-center">Вы получите: {Math.max((Number(withdrawAmount)||0) - WITHDRAWAL_FEE_TON, 0).toFixed(4)} TON</div>
             <div class="text-xs text-gray-400 mt-2 text-center">Доступно: {tonBalance} TON</div>
           </div>
-          <button class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl font-semibold" onclick={processWithdraw}>
+          <button class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl font-semibold disabled:opacity-50" onclick={processWithdraw} disabled={withdrawAmount < WITHDRAWAL_FEE_TON}>
             Вывести
           </button>
         </div>
