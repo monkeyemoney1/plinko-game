@@ -36,35 +36,32 @@ async function migrate() {
       // Выполняем дополнительные миграции (например, добавление новых таблиц)
       console.log('📝 Checking for additional migrations...');
       
-      // Миграция deposits table
-      try {
-        const migrationPath = join(__dirname, '..', 'migrations', '004_add_deposits_table.sql');
-        const migration = await readFile(migrationPath, 'utf8');
-        await client.query(migration);
-        console.log('✅ Deposits migration applied successfully');
-      } catch (migrationError) {
-        if (migrationError.code === '42P07') {
-          console.log('⚠️  Deposits table already exists, skipping');
-        } else if (migrationError.code === 'ENOENT') {
-          console.log('ℹ️  Deposits migration not found');
-        } else {
-          console.warn('⚠️  Deposits migration warning:', migrationError.message);
-        }
-      }
-      
-      // Миграция star_transactions table
-      try {
-        const starMigrationPath = join(__dirname, '..', 'migrations', '005_add_star_transactions.sql');
-        const starMigration = await readFile(starMigrationPath, 'utf8');
-        await client.query(starMigration);
-        console.log('✅ Stars transactions migration applied successfully');
-      } catch (migrationError) {
-        if (migrationError.code === '42P07') {
-          console.log('⚠️  Stars transactions table already exists, skipping');
-        } else if (migrationError.code === 'ENOENT') {
-          console.log('ℹ️  Stars migration not found');
-        } else {
-          console.warn('⚠️  Stars migration warning:', migrationError.message);
+      // Список всех миграций в порядке выполнения
+      const migrations = [
+        '004_add_deposits_table.sql',
+        '005_add_star_transactions.sql',
+        '006_create_withdrawals_table.sql',
+        '007_update_withdrawals_table.sql',
+        '008_create_user_wallets_table.sql'
+      ];
+
+      // Выполняем каждую миграцию
+      for (const migrationFile of migrations) {
+        try {
+          const migrationPath = join(__dirname, '..', 'migrations', migrationFile);
+          const migration = await readFile(migrationPath, 'utf8');
+          await client.query(migration);
+          console.log(`✅ Migration ${migrationFile} applied successfully`);
+        } catch (migrationError) {
+          if (migrationError.code === '42P07') {
+            console.log(`⚠️  Migration ${migrationFile} - table already exists, skipping`);
+          } else if (migrationError.code === 'ENOENT') {
+            console.log(`ℹ️  Migration ${migrationFile} not found, skipping`);
+          } else if (migrationError.code === '42710') {
+            console.log(`⚠️  Migration ${migrationFile} - object already exists, skipping`);
+          } else {
+            console.warn(`⚠️  Migration ${migrationFile} warning:`, migrationError.message);
+          }
         }
       }
       
