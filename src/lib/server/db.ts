@@ -98,3 +98,19 @@ export async function ensureUser(params: {
     client.release();
   }
 }
+
+// Совместимый helper, аналогичный `$lib/db` для существующих вызовов
+export const db = {
+  async query(text: string, params?: any[]) {
+    const client = await getClient();
+    try {
+      const result = await client.query(text, params);
+      return result;
+    } finally {
+      client.release();
+    }
+  },
+  async getClient() {
+    return await getClient();
+  }
+};

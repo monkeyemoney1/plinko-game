@@ -446,11 +446,9 @@
   
   // Функция для расчета комиссии (локальная копия логики сервера)
   function calculateFeeInfo(amount) {
-    const FIXED_FEE = 0.01;
-    const PERCENTAGE_FEE = 0.02;
-    
-    const percentageFee = amount * PERCENTAGE_FEE;
-    const totalFee = Math.max(FIXED_FEE, percentageFee);
+    // Фиксированная комиссия 0.05 TON, без процентной части
+    const FIXED_FEE = 0.05;
+    const totalFee = FIXED_FEE;
     
     return {
       fee: Number(totalFee.toFixed(6)),
@@ -555,7 +553,7 @@
           Конвертировать
         </button>
         <span class="w-full sm:w-auto text-white text-center">
-          {direction === 'tonToStars' ? `+${convertAmount * 145} ⭐️` : `+${convertAmount / 155} TON`}
+          {direction === 'tonToStars' ? `+${(convertAmount * 100).toFixed(2)} ⭐️` : `+${(convertAmount / 95).toFixed(4)} TON`}
         </span>
       </div>
     </div>

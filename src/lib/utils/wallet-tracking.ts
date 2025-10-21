@@ -1,4 +1,4 @@
-import { db } from '$lib/db';
+import { db } from '$lib/server/db';
 
 /**
  * Обеспечивает существование таблицы user_wallets

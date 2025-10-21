@@ -36,14 +36,16 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         return json({ error: 'Insufficient TON balance' }, { status: 400 });
       }
       ton -= amt;
-      stars += amt * 145; // новое правило обмена 1 TON -> 145 Stars
+      // 1 TON -> 100 Stars
+      stars += amt * 100;
     } else {
       if (stars < amt) {
         await client.query('ROLLBACK');
         return json({ error: 'Insufficient Stars balance' }, { status: 400 });
       }
       stars -= amt;
-      ton += amt / 155; // новое правило обмена 155 Stars -> 1 TON
+      // 95 Stars -> 1 TON
+      ton += amt / 95;
     }
 
     const upres = await client.query(

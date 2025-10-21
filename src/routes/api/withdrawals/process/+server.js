@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { pool } from '$lib/db';
+import { pool } from '$lib/server/db';
 import { env as privateEnv } from '$env/dynamic/private';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);

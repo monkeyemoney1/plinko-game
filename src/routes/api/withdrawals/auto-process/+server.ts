@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
-import { pool } from '$lib/db';
+import { pool } from '$lib/server/db';
 import { WITHDRAWAL_CONFIG } from '$lib/config/withdrawals';
 
 // POST - автоматическая обработка очереди выплат

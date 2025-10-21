@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { pool } from '$lib/db';
+import { pool } from '$lib/server/db';
 
 export const GET: RequestHandler = async ({ url }) => {
   try {

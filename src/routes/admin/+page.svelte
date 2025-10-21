@@ -782,8 +782,8 @@
   
   <!-- Модальное окно с детальными данными пользователя -->
   {#if isUserModalOpen && selectedUser}
-    <div class="modal-overlay" on:click={closeUserModal}>
-      <div class="modal-content" on:click|stopPropagation>
+    <div class="modal-overlay" on:click={closeUserModal} role="button" tabindex="0" on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && closeUserModal()}>
+      <div class="modal-content" on:click|stopPropagation on:keydown|stopPropagation role="dialog" tabindex="0">
         <div class="modal-header">
           <h2>📊 Детальная информация о пользователе</h2>
           <button class="modal-close" on:click={closeUserModal}>✕</button>
@@ -804,13 +804,13 @@
               </div>
               <div class="info-item">
                 <span class="info-label">Telegram ID:</span>
-                <span class="info-value copyable" on:click={() => copyToClipboard(selectedUser.telegram_id || '')}>
+                <span class="info-value copyable" role="button" tabindex="0" on:click={() => copyToClipboard(selectedUser.telegram_id || '')} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && copyToClipboard(selectedUser.telegram_id || '')}>
                   {selectedUser.telegram_id || 'N/A'}
                 </span>
               </div>
               <div class="info-item">
                 <span class="info-label">Адрес кошелька:</span>
-                <span class="info-value copyable" on:click={() => copyToClipboard(selectedUser.wallet_address || '')}>
+                <span class="info-value copyable" role="button" tabindex="0" on:click={() => copyToClipboard(selectedUser.wallet_address || '')} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && copyToClipboard(selectedUser.wallet_address || '')}>
                   {selectedUser.wallet_address || 'N/A'}
                 </span>
               </div>
@@ -923,8 +923,8 @@
   
   <!-- Модальное окно для кошелька -->
   {#if isWalletModalOpen && selectedWallet}
-    <div class="modal-overlay" on:click={closeWalletModal}>
-      <div class="modal-content" on:click|stopPropagation>
+    <div class="modal-overlay" on:click={closeWalletModal} role="button" tabindex="0" on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && closeWalletModal()}>
+      <div class="modal-content" on:click|stopPropagation on:keydown|stopPropagation role="dialog" tabindex="0">
         <div class="modal-header">
           <h2>💼 Информация о кошельке</h2>
           <button class="modal-close" on:click={closeWalletModal}>✕</button>
@@ -948,13 +948,13 @@
               </div>
               <div class="info-item">
                 <span class="info-label">Telegram ID:</span>
-                <span class="info-value copyable" on:click={() => copyToClipboard(selectedWallet.telegram_id)}>
+                <span class="info-value copyable" role="button" tabindex="0" on:click={() => copyToClipboard(selectedWallet.telegram_id)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && copyToClipboard(selectedWallet.telegram_id)}>
                   {selectedWallet.telegram_id}
                 </span>
               </div>
               <div class="info-item full-width">
                 <span class="info-label">Адрес кошелька (UQ формат):</span>
-                <span class="info-value copyable" on:click={() => copyToClipboard(selectedWallet.wallet_address)}>
+                <span class="info-value copyable" role="button" tabindex="0" on:click={() => copyToClipboard(selectedWallet.wallet_address)} on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && copyToClipboard(selectedWallet.wallet_address)}>
                   {selectedWallet.wallet_address}
                 </span>
               </div>

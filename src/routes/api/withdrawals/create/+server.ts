@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { pool } from '$lib/db';
+import { pool } from '$lib/server/db';
 import { 
   WITHDRAWAL_CONFIG, 
   calculateWithdrawalFee, 
@@ -8,7 +8,13 @@ import {
   shouldAutoProcess,
   requiresManualReview
 } from '$lib/config/withdrawals';
-import { sendTonTransfer } from '$lib/server/ton-transfer';
+import { env as privateEnv } from '$env/dynamic/private';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+// Используем проверенный helper из предыдущей версии
+// server/ton-helper.cjs: createTonClient, openGameWallet, sendTon, waitSeqno
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ton = require(process.cwd() + '/server/ton-helper.cjs');
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
@@ -141,7 +147,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // Немедленно отправляем средства через блокчейн
       console.log(`[Withdrawal ${withdrawalId}] Starting automatic TON transfer...`);
-      
+
       await client.query('BEGIN');
       
       try {
@@ -153,12 +159,34 @@ export const POST: RequestHandler = async ({ request }) => {
         
         await client.query('COMMIT');
         
-        // Отправляем транзакцию в блокчейн TON
-        const transferResult = await sendTonTransfer(wallet_address, feeInfo.netAmount);
-        
+        // Отправляем транзакцию в блокчейн TON через стабильный helper
+        const network = privateEnv.TON_NETWORK || 'mainnet';
+        const apiKey = privateEnv.TONCENTER_API_KEY || privateEnv.TON_API_KEY || '';
+        const endpoint = privateEnv.TONCENTER_ENDPOINT;
+        const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
+
+        if (!mnemonic) {
+          throw new Error('Wallet mnemonic is not configured');
+        }
+
+        const tonClient = ton.createTonClient({ network, apiKey, endpoint });
+        const sender = await ton.openGameWallet(tonClient, mnemonic);
+
+        // Проверим баланс кошелька (не блокируем, только информируем)
+        try {
+          const mod = await import('@ton/ton');
+          const balance = await sender.contract.getBalance();
+          const balTon = parseFloat(mod.fromNano(balance));
+          console.log(`[Withdrawal ${withdrawalId}] Game wallet balance: ${balTon} TON`);
+        } catch {}
+
+        const beforeSeqno = await sender.contract.getSeqno();
+        await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
+        const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+
         await client.query('BEGIN');
         
-        if (transferResult.success) {
+        if (confirmed) {
           // Успешная отправка - обновляем статус на "завершено"
           await client.query(
             `UPDATE withdrawals 
@@ -166,12 +194,12 @@ export const POST: RequestHandler = async ({ request }) => {
                  transaction_hash = $2, 
                  completed_at = NOW() 
              WHERE id = $3`,
-            [WITHDRAWAL_CONFIG.STATUSES.COMPLETED, transferResult.txHash, withdrawalId]
+            [WITHDRAWAL_CONFIG.STATUSES.COMPLETED, `seqno_${beforeSeqno}_w${withdrawalId}`, withdrawalId]
           );
           
           await client.query('COMMIT');
           
-          console.log(`[Withdrawal ${withdrawalId}] Successfully completed! TX: ${transferResult.txHash}`);
+          console.log(`[Withdrawal ${withdrawalId}] Successfully completed!`);
           
           return json({
             success: true,
@@ -183,7 +211,7 @@ export const POST: RequestHandler = async ({ request }) => {
               fee: feeInfo.fee,
               wallet_address,
               status: WITHDRAWAL_CONFIG.STATUSES.COMPLETED,
-              transaction_hash: transferResult.txHash,
+              transaction_hash: `seqno_${beforeSeqno}_w${withdrawalId}`,
               created_at: withdrawalResult.rows[0].created_at
             },
             message: `Средства успешно отправлены! Сумма: ${feeInfo.netAmount} TON`
@@ -196,7 +224,7 @@ export const POST: RequestHandler = async ({ request }) => {
              SET status = $1, 
                  error_message = $2 
              WHERE id = $3`,
-            [WITHDRAWAL_CONFIG.STATUSES.FAILED, transferResult.error, withdrawalId]
+            [WITHDRAWAL_CONFIG.STATUSES.FAILED, 'Transaction not confirmed in time', withdrawalId]
           );
           
           // Возвращаем средства на баланс пользователя
@@ -207,11 +235,11 @@ export const POST: RequestHandler = async ({ request }) => {
           
           await client.query('COMMIT');
           
-          console.error(`[Withdrawal ${withdrawalId}] Failed: ${transferResult.error}`);
+          console.error(`[Withdrawal ${withdrawalId}] Failed: not confirmed`);
           
           return json({
             success: false,
-            error: `Ошибка отправки средств: ${transferResult.error}. Средства возвращены на баланс.`
+            error: 'Ошибка отправки средств: не подтверждена транзакция. Средства возвращены на баланс.'
           }, { status: 500 });
         }
         

@@ -129,8 +129,8 @@
     <!-- Фильтры -->
     <div class="bg-gray-800 rounded-lg p-4 mb-6">
       <div class="flex gap-4 items-center">
-        <label class="text-white">Статус:</label>
-        <select bind:value={selectedStatus} on:change={loadWithdrawals} class="bg-gray-700 text-white rounded px-3 py-1">
+        <label class="text-white" for="statusFilter">Статус:</label>
+        <select id="statusFilter" bind:value={selectedStatus} on:change={loadWithdrawals} class="bg-gray-700 text-white rounded px-3 py-1">
           <option value="all">Все</option>
           <option value="pending">Ожидает</option>
           <option value="manual_review">Ручная проверка</option>
@@ -240,8 +240,8 @@
       </div>
 
       <div class="mb-4">
-        <label class="block text-gray-400 text-sm mb-2">Заметки администратора:</label>
-        <textarea 
+        <label class="block text-gray-400 text-sm mb-2" for="adminNotes">Заметки администратора:</label>
+        <textarea id="adminNotes"
           bind:value={adminNotes}
           class="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
           rows="3"
@@ -250,8 +250,8 @@
 
       {#if selectedWithdrawal.status === 'manual_review' || selectedWithdrawal.status === 'pending'}
         <div class="mb-4">
-          <label class="block text-gray-400 text-sm mb-2">Причина отклонения (если отклоняете):</label>
-          <input 
+          <label class="block text-gray-400 text-sm mb-2" for="rejectReason">Причина отклонения (если отклоняете):</label>
+          <input id="rejectReason"
             bind:value={rejectReason}
             class="w-full bg-gray-700 text-white rounded px-3 py-2 text-sm"
             placeholder="Укажите причину отклонения"
