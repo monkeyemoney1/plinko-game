@@ -36,23 +36,17 @@ export const GET: RequestHandler = async ({ url }) => {
 
       return json({
         success: true,
-        withdrawals: withdrawals.map(w => {
-          const fee = 0.1; // фиксированная комиссия
-          const amount = parseFloat(w.amount);
-          return {
-            id: w.id,
-            user_id: w.user_id,
-            amount,
-            fee,
-            net_amount: Math.max(amount - fee, 0),
-            wallet_address: w.wallet_address,
-            status: w.status,
-            transaction_hash: w.transaction_hash,
-            error_message: w.error_message,
-            created_at: w.created_at,
-            completed_at: w.completed_at
-          };
-        })
+        withdrawals: withdrawals.map(w => ({
+          id: w.id,
+          user_id: w.user_id,
+          amount: parseFloat(w.amount),
+          wallet_address: w.wallet_address,
+          status: w.status,
+          transaction_hash: w.transaction_hash,
+          error_message: w.error_message,
+          created_at: w.created_at,
+          completed_at: w.completed_at
+        }))
       });
 
     } finally {

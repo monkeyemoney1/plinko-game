@@ -3,7 +3,6 @@
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
-  import { normalizeAddressClient } from '$lib/ton-utils';
   import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
 
   let tonConnectUI: TonConnectUI;
@@ -78,8 +77,6 @@
   let depositAmount = 0;
   let starsDepositAmount = 0;
   let withdrawAmount = 0;
-  const WITHDRAWAL_FEE_TON = 0.1; // фиксированная комиссия
-  const MIN_WITHDRAWAL_TON = 0.11; // минимум с учетом комиссии
   let transactions = [];
   function handleStarsDeposit() {
     isStarsDepositModalOpen = true;
@@ -113,7 +110,7 @@
     
     // Fallback: используем userId как telegram_id для тестирования
     if (!telegramId) {
-      telegramId = parseInt(userId || '0') || 123456789; // Fallback ID для тестирования
+      telegramId = parseInt(userId) || 123456789; // Fallback ID для тестирования
       console.log('Используем fallback Telegram ID:', telegramId);
     }
     
@@ -188,7 +185,7 @@
       // Fallback
       if (!telegramId) {
         const userId = localStorage.getItem('user_id');
-        telegramId = parseInt(userId || '0') || 123456789;
+        telegramId = parseInt(userId) || 123456789;
       }
       
       const res = await fetch('/api/payments/stars/verify', {
@@ -306,7 +303,7 @@
     }
   }
   
-  async function checkDepositStatus(userId: string, userAddress: string, verifyAmount: number) {
+  async function checkDepositStatus(userId, userAddress, verifyAmount) {
     const maxAttempts = 40; // Максимум 40 попыток (20 минут при проверке каждые 15 сек)
     let attempts = 0;
 
@@ -392,10 +389,6 @@
       alert('Сумма должна быть больше 0');
       return;
     }
-    if (withdrawAmount < MIN_WITHDRAWAL_TON) {
-      alert(`Минимальная сумма вывода ${MIN_WITHDRAWAL_TON} TON (комиссия ${WITHDRAWAL_FEE_TON} TON)`);
-      return;
-    }
     
     if (withdrawAmount > tonBalance) {
       alert('Недостаточно средств на балансе');
@@ -403,6 +396,18 @@
     }
     
     try {
+      // Сначала показываем информацию о комиссии
+      const feeInfo = calculateFeeInfo(withdrawAmount);
+      const confirmMessage = `Подтвердите вывод:
+Сумма вывода: ${withdrawAmount} TON
+Комиссия: ${feeInfo.fee} TON
+К получению: ${feeInfo.netAmount} TON
+Итого к списанию: ${feeInfo.grossAmount} TON`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+      
       // Создаем запрос на вывод
       const createRes = await fetch('/api/withdrawals/create', {
         method: 'POST',
@@ -421,37 +426,37 @@
       }
       
       const createData = await createRes.json();
-      const withdrawalId = createData.withdrawal.id;
       
-      // Автоматически обрабатываем вывод
-      const processRes = await fetch('/api/withdrawals/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          withdrawal_id: withdrawalId
-        })
-      });
+      // Показываем результат создания заявки
+      alert(createData.message);
+      withdrawAmount = 0;
+      loadBalance();
+      closeWithdrawModal();
       
-      if (processRes.ok) {
-        const processData = await processRes.json();
-        if (processData.success) {
-          const net = Math.max(Number(withdrawAmount) - WITHDRAWAL_FEE_TON, 0);
-          alert(`Вывод успешно выполнен!\nСписано: ${withdrawAmount} TON\nКомиссия: ${WITHDRAWAL_FEE_TON} TON\nПолучено: ${net} TON\nHash: ${processData.withdrawal.transaction_hash}`);
-          withdrawAmount = 0;
-          loadBalance();
-          closeWithdrawModal();
-        } else {
-          alert('Ошибка обработки вывода: ' + (processData.error || 'Неизвестная ошибка'));
-        }
-      } else {
-        const error = await processRes.json();
-        alert('Ошибка обработки вывода: ' + (error.error || 'Неизвестная ошибка'));
+      // Если статус требует ручной проверки, информируем об этом
+      if (createData.withdrawal.status === 'manual_review') {
+        alert('Ваша заявка отправлена на ручную проверку администратором. Ожидайте обработки.');
       }
       
     } catch (e) {
       console.error('Withdrawal error:', e);
       alert('Ошибка при выводе средств: ' + (e instanceof Error ? e.message : String(e)));
     }
+  }
+  
+  // Функция для расчета комиссии (локальная копия логики сервера)
+  function calculateFeeInfo(amount) {
+    const FIXED_FEE = 0.01;
+    const PERCENTAGE_FEE = 0.02;
+    
+    const percentageFee = amount * PERCENTAGE_FEE;
+    const totalFee = Math.max(FIXED_FEE, percentageFee);
+    
+    return {
+      fee: Number(totalFee.toFixed(6)),
+      netAmount: Number((amount - totalFee).toFixed(6)),
+      grossAmount: Number(amount.toFixed(6))
+    };
   }
   function convert() {
     const userId = localStorage.getItem('user_id');
@@ -495,7 +500,6 @@
     margin: 0;
   }
   input[type="number"] {
-    appearance: textfield;
     -moz-appearance: textfield;
   }
 </style>
@@ -602,12 +606,36 @@
           <div class="text-white text-lg font-bold mb-4">Вывод TON</div>
           <div class="w-full mb-4">
             <input type="number" min="0" step="0.01" bind:value={withdrawAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center mb-3" placeholder="Сумма для вывода" />
-            <div class="text-xs text-gray-400 mt-1 text-center">Комиссия: {WITHDRAWAL_FEE_TON} TON</div>
-            <div class="text-xs text-gray-300 mt-1 text-center">Вы получите: {Math.max((Number(withdrawAmount)||0) - WITHDRAWAL_FEE_TON, 0).toFixed(4)} TON</div>
-            <div class="text-xs text-gray-500 mt-1 text-center">Минимум: {MIN_WITHDRAWAL_TON} TON</div>
             <div class="text-xs text-gray-400 mt-2 text-center">Доступно: {tonBalance} TON</div>
+            
+            {#if withdrawAmount > 0}
+              {@const feeInfo = calculateFeeInfo(withdrawAmount)}
+              <div class="bg-slate-700 rounded-lg p-3 mt-3 text-xs">
+                <div class="text-gray-300 mb-2 font-semibold">Детали вывода:</div>
+                <div class="flex justify-between text-gray-400">
+                  <span>Сумма вывода:</span>
+                  <span>{withdrawAmount} TON</span>
+                </div>
+                <div class="flex justify-between text-gray-400">
+                  <span>Комиссия:</span>
+                  <span>{feeInfo.fee} TON</span>
+                </div>
+                <div class="border-t border-gray-600 mt-2 pt-2 flex justify-between text-white font-semibold">
+                  <span>К получению:</span>
+                  <span>{feeInfo.netAmount} TON</span>
+                </div>
+                <div class="flex justify-between text-yellow-400 text-xs mt-1">
+                  <span>К списанию:</span>
+                  <span>{feeInfo.grossAmount} TON</span>
+                </div>
+              </div>
+            {/if}
           </div>
-          <button class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl font-semibold disabled:opacity-50" onclick={processWithdraw} disabled={withdrawAmount < MIN_WITHDRAWAL_TON}>
+          <button 
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl font-semibold disabled:bg-gray-600 disabled:cursor-not-allowed" 
+            onclick={processWithdraw}
+            disabled={!withdrawAmount || withdrawAmount <= 0 || withdrawAmount > tonBalance}
+          >
             Вывести
           </button>
         </div>

@@ -12,18 +12,9 @@ if (browser) {
     if (typeof (globalThis as any).Buffer === 'undefined') {
       (globalThis as any).Buffer = Buffer;
     }
-  }).catch(() => {
-    // Fallback если buffer недоступен
-    console.warn('Buffer polyfill not available');
   });
 
-  // Убеждаемся что global определен
   if (typeof global === 'undefined') {
     (globalThis as any).global = globalThis;
-  }
-  
-  // Добавляем Buffer как пустой объект если еще не определен
-  if (typeof (globalThis as any).Buffer === 'undefined') {
-    (globalThis as any).Buffer = {};
   }
 }

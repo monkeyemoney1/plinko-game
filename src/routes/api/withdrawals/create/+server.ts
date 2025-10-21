@@ -1,8 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { pool } from '$lib/db';
-import { env as privateEnv } from '$env/dynamic/private';
-import { sendAdminMessage } from '$lib/telegram/botAPI';
+import { 
+  WITHDRAWAL_CONFIG, 
+  calculateWithdrawalFee, 
+  validateWithdrawalLimits,
+  shouldAutoProcess,
+  requiresManualReview
+} from '$lib/config/withdrawals';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
@@ -24,46 +29,13 @@ export const POST: RequestHandler = async ({ request }) => {
       }, { status: 400 });
     }
 
-    // Комиссия на вывод и минимальная сумма
-    const WITHDRAWAL_FEE_TON = 0.1; // фиксированная комиссия 0.1 TON
-    const MIN_WITHDRAWAL_TON = 0.11; // минимум 0.11 TON чтобы пользователь получил хотя бы 0.01 TON
-    if (withdrawAmount < MIN_WITHDRAWAL_TON) {
-      return json({ 
-        success: false, 
-        error: `Minimum withdrawal amount is ${MIN_WITHDRAWAL_TON} TON (fee ${WITHDRAWAL_FEE_TON} TON)` 
-      }, { status: 400 });
-    }
-
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Hidden daily limit per user
-      const DAILY_LIMIT = parseFloat(privateEnv.WITHDRAWAL_DAILY_LIMIT_TON || '5');
-      const dailySumRes = await client.query(
-        `SELECT COALESCE(SUM(amount), 0) AS total
-         FROM withdrawals
-         WHERE user_id = $1
-           AND created_at >= NOW() - INTERVAL '1 day'
-           AND status IN ('pending','processing','completed')`,
-        [user_id]
-      );
-      const spentToday = parseFloat(dailySumRes.rows[0].total);
-      if (spentToday + withdrawAmount > DAILY_LIMIT) {
-        // Notify admin silently
-        sendAdminMessage(
-          `🚫 Попытка превышения лимита вывода\nUser: ${user_id}\nRequested: ${withdrawAmount} TON\nSpent today: ${spentToday} TON\nLimit: ${DAILY_LIMIT} TON\nAddress: ${wallet_address}`
-        ).catch(() => {});
-        await client.query('ROLLBACK');
-        return json({
-          success: false,
-          error: 'Withdrawal temporarily unavailable. Please try again later.'
-        }, { status: 429 });
-      }
-
-      // Проверяем баланс пользователя
+      // Проверяем пользователя и его баланс
       const userResult = await client.query(
-        'SELECT ton_balance FROM users WHERE id = $1',
+        'SELECT ton_balance, created_at FROM users WHERE id = $1',
         [user_id]
       );
 
@@ -75,22 +47,83 @@ export const POST: RequestHandler = async ({ request }) => {
         }, { status: 404 });
       }
 
-      const currentBalance = parseFloat(userResult.rows[0].ton_balance);
-      
-      if (currentBalance < withdrawAmount) {
+      const user = userResult.rows[0];
+      const currentBalance = parseFloat(user.ton_balance);
+      const accountAge = Date.now() - new Date(user.created_at).getTime();
+      const accountAgeHours = accountAge / (1000 * 60 * 60);
+
+      // Проверяем возраст аккаунта
+      if (accountAgeHours < WITHDRAWAL_CONFIG.MIN_ACCOUNT_AGE_HOURS) {
         await client.query('ROLLBACK');
         return json({ 
           success: false, 
-          error: `Insufficient balance. Current balance: ${currentBalance} TON, requested: ${withdrawAmount} TON` 
+          error: `Вывод доступен через ${Math.ceil(WITHDRAWAL_CONFIG.MIN_ACCOUNT_AGE_HOURS - accountAgeHours)} часов после регистрации` 
         }, { status: 400 });
       }
 
-      // Создаем запись о выводе со статусом "pending"
+      // Получаем статистику выводов за сегодня
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const dailyStatsResult = await client.query(
+        `SELECT 
+          COALESCE(SUM(amount), 0) as daily_amount,
+          COUNT(*) as daily_count
+         FROM withdrawals 
+         WHERE user_id = $1 
+         AND created_at >= $2 
+         AND status NOT IN ('failed', 'cancelled')`,
+        [user_id, today]
+      );
+
+      const dailyStats = dailyStatsResult.rows[0];
+      const dailyWithdrawn = parseFloat(dailyStats.daily_amount);
+      const dailyCount = parseInt(dailyStats.daily_count);
+
+      // Проверяем лимиты
+      const limitCheck = validateWithdrawalLimits(withdrawAmount, dailyWithdrawn, dailyCount);
+      if (!limitCheck.valid) {
+        await client.query('ROLLBACK');
+        return json({ 
+          success: false, 
+          error: limitCheck.error 
+        }, { status: 400 });
+      }
+
+      // Вычисляем комиссию
+      const feeInfo = calculateWithdrawalFee(withdrawAmount);
+      
+      // Проверяем достаточность баланса с учетом комиссии
+      if (currentBalance < feeInfo.grossAmount) {
+        await client.query('ROLLBACK');
+        return json({ 
+          success: false, 
+          error: `Недостаточно средств. Требуется: ${feeInfo.grossAmount} TON (включая комиссию ${feeInfo.fee} TON), доступно: ${currentBalance} TON` 
+        }, { status: 400 });
+      }
+
+      // Определяем статус вывода
+      let status: string = WITHDRAWAL_CONFIG.STATUSES.PENDING;
+      if (requiresManualReview(withdrawAmount)) {
+        status = WITHDRAWAL_CONFIG.STATUSES.MANUAL_REVIEW;
+      }
+
+      // Создаем запись о выводе
       const withdrawalResult = await client.query(
-        `INSERT INTO withdrawals (user_id, amount, wallet_address, status, created_at) 
-         VALUES ($1, $2, $3, 'pending', NOW()) 
-         RETURNING id, created_at`,
-        [user_id, withdrawAmount, wallet_address]
+        `INSERT INTO withdrawals (
+          user_id, amount, wallet_address, status, fee, net_amount, 
+          auto_process, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+        RETURNING id, created_at`,
+        [
+          user_id, 
+          feeInfo.grossAmount, 
+          wallet_address, 
+          status,
+          feeInfo.fee,
+          feeInfo.netAmount,
+          shouldAutoProcess(withdrawAmount)
+        ]
       );
 
       const withdrawalId = withdrawalResult.rows[0].id;
@@ -98,33 +131,46 @@ export const POST: RequestHandler = async ({ request }) => {
       // Резервируем средства (уменьшаем баланс)
       await client.query(
         'UPDATE users SET ton_balance = ton_balance - $1 WHERE id = $2',
-        [withdrawAmount, user_id]
+        [feeInfo.grossAmount, user_id]
       );
 
       await client.query('COMMIT');
 
-      console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${withdrawAmount} TON`);
-      // Notify admin about new withdrawal request
-      const fee = WITHDRAWAL_FEE_TON;
-      const net = Math.max(withdrawAmount - fee, 0);
-      sendAdminMessage(
-        `🆕 Новый запрос на вывод\nID: ${withdrawalId}\nUser: ${user_id}\nAmount: ${withdrawAmount} TON\nFee: ${fee} TON\nNet: ${net} TON\nTo: ${wallet_address}`
-      ).catch(() => {});
+      console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${feeInfo.grossAmount} TON (net: ${feeInfo.netAmount}, fee: ${feeInfo.fee})`);
 
-      return json({
+      const responseData = {
         success: true,
         withdrawal: {
           id: withdrawalId,
           user_id,
-          amount: withdrawAmount,
-          fee: WITHDRAWAL_FEE_TON,
-          net_amount: Math.max(withdrawAmount - WITHDRAWAL_FEE_TON, 0),
+          gross_amount: feeInfo.grossAmount,
+          net_amount: feeInfo.netAmount,
+          fee: feeInfo.fee,
           wallet_address,
-          status: 'pending',
+          status,
+          auto_process: shouldAutoProcess(withdrawAmount),
           created_at: withdrawalResult.rows[0].created_at
         },
-        message: 'Withdrawal request created successfully. Processing...'
-      });
+        message: status === WITHDRAWAL_CONFIG.STATUSES.MANUAL_REVIEW 
+          ? 'Заявка создана и отправлена на ручную проверку'
+          : 'Заявка создана и ожидает обработки'
+      };
+
+      // Если включена автообработка, запускаем её
+      if (shouldAutoProcess(withdrawAmount) && status === WITHDRAWAL_CONFIG.STATUSES.PENDING) {
+        // Запускаем автообработку асинхронно
+        fetch('/api/withdrawals/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ withdrawal_id: withdrawalId })
+        }).catch(err => {
+          console.error('Auto-process failed:', err);
+        });
+        
+        responseData.message = 'Заявка создана и отправлена на автоматическую обработку';
+      }
+
+      return json(responseData);
 
     } catch (dbError) {
       await client.query('ROLLBACK');
