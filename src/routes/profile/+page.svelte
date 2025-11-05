@@ -123,6 +123,7 @@
         body: JSON.stringify({ 
           telegram_id: telegramId,  // Изменено с user_id на telegram_id
           amount: starsInt,
+          user_id: parseInt(userId),
           description: `Пополнение баланса игры на ${starsDepositAmount} Stars`
         })
       });

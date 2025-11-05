@@ -16,6 +16,7 @@ import {
 interface InitiateStarsPaymentRequest {
   telegram_id: number;
   amount: number;
+  user_id?: number; // привязка к текущему пользователю игры
   initData?: any;
 }
 
@@ -32,7 +33,7 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
   
   try {
   const body: InitiateStarsPaymentRequest = await request.json();
-  const { telegram_id, initData } = body;
+  const { telegram_id, user_id, initData } = body;
   // Приводим сумму к целому количеству Stars
   const amount = Math.round(Number((body as any).amount));
 
@@ -55,27 +56,46 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
 
     await client.query('BEGIN');
 
-    // 1. Проверяем существование пользователя в нашей базе
-    let userResult = await client.query(
-      'SELECT id, telegram_id, stars_balance FROM users WHERE telegram_id = $1',
-      [telegram_id]
-    );
+    // 1. Определяем корректного пользователя для транзакции
+    let user: { id: number; telegram_id: number; stars_balance: number } | null = null;
 
-    let user;
-    if (userResult.rows.length === 0) {
-      // Создаем тестового пользователя автоматически
-      console.log(`Создание тестового пользователя для telegram_id: ${telegram_id}`);
-      
-      const insertResult = await client.query(`
-        INSERT INTO users (telegram_id, ton_address, telegram_username, ton_balance, stars_balance, created_at)
-        VALUES ($1, $2, $3, $4, $5, NOW())
-        RETURNING id, telegram_id, stars_balance
-      `, [telegram_id, `test_address_${telegram_id}`, `test_user_${telegram_id}`, 0, 0]);
-      
+    if (user_id) {
+      // Пробуем привязать платеж к текущему игровому пользователю
+      const byId = await client.query(
+        'SELECT id, telegram_id, stars_balance FROM users WHERE id = $1',
+        [user_id]
+      );
+      if (byId.rows.length > 0) {
+        user = byId.rows[0] as any;
+        // Пропишем telegram_id, если он отсутствует у пользователя
+        if (user && !user.telegram_id) {
+          await client.query('UPDATE users SET telegram_id = $1, updated_at = NOW() WHERE id = $2', [telegram_id, user.id]);
+          (user as any).telegram_id = telegram_id;
+        }
+      }
+    }
+
+    if (!user) {
+      // Пытаемся найти по telegram_id
+      const byTg = await client.query(
+        'SELECT id, telegram_id, stars_balance FROM users WHERE telegram_id = $1',
+        [telegram_id]
+      );
+      if (byTg.rows.length > 0) {
+        user = byTg.rows[0];
+      }
+    }
+
+    if (!user) {
+      // Как крайний случай — создаем пользователя, но ЛУЧШЕ передавать user_id с клиента
+      console.log(`Создание пользователя для telegram_id: ${telegram_id} (не найден по user_id/telegram_id)`);
+      const insertResult = await client.query(
+        `INSERT INTO users (telegram_id, ton_address, telegram_username, ton_balance, stars_balance, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING id, telegram_id, stars_balance`,
+        [telegram_id, `tg_${telegram_id}`, `tg_${telegram_id}`, 0, 0]
+      );
       user = insertResult.rows[0];
-      console.log('Тестовый пользователь создан:', user);
-    } else {
-      user = userResult.rows[0];
     }
 
     // 2. Проверяем пользователя через Telegram Bot API
@@ -114,7 +134,7 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
       INSERT INTO star_transactions (
         user_id, telegram_id, amount, payload, status, created_at
       ) VALUES ($1, $2, $3, $4, 'pending', NOW())
-    `, [user.id, telegram_id, amount, payload]);
+    `, [user!.id, telegram_id, amount, payload]);
 
     // 6. Создаем invoice через Telegram Bot API
     console.log('Создание Stars invoice...');
