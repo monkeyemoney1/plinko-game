@@ -321,3 +321,15 @@ export async function setWebhook(webhookUrl: string, secretToken: string): Promi
     return false;
   }
 }
+
+/**
+ * Получает информацию о текущем webhook у бота
+ */
+export async function getWebhookInfo(): Promise<any> {
+  try {
+    return await makeBotAPIRequest('getWebhookInfo');
+  } catch (e) {
+    console.error('Ошибка getWebhookInfo:', e);
+    throw e;
+  }
+}
