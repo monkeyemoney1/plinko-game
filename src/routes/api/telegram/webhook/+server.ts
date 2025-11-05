@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestEvent } from '@sveltejs/kit';
 import { env as privateEnv } from '$env/dynamic/private';
 import { pool } from '$lib/server/db';
+import { answerPreCheckoutQuery } from '$lib/telegram/botAPI';
 
 interface SuccessfulPayment {
   currency: string; // 'XTR' for Stars
@@ -15,6 +16,13 @@ interface MessageUpdate {
   message?: {
     chat: { id: number };
     successful_payment?: SuccessfulPayment;
+  };
+  pre_checkout_query?: {
+    id: string;
+    from: { id: number };
+    currency: string;
+    total_amount: number;
+    invoice_payload: string;
   };
 }
 
@@ -32,9 +40,20 @@ export async function POST({ request }: RequestEvent) {
   const client = await pool.connect();
   try {
     const update = (await request.json()) as MessageUpdate;
+
+    // 1) Обрабатываем pre_checkout_query (подтверждаем оплату)
+    if (update.pre_checkout_query) {
+      const pq = update.pre_checkout_query;
+      const ok = await answerPreCheckoutQuery(pq.id, true);
+      if (!ok) {
+        return json({ ok: false, error: 'pre_checkout_confirm_failed' }, { status: 500 });
+      }
+      return json({ ok: true, status: 'pre_checkout_confirmed' });
+    }
+
     const sp = update.message?.successful_payment;
     if (!sp) {
-      // Не интересует
+      // Не интересующие обновления
       return json({ ok: true });
     }
 

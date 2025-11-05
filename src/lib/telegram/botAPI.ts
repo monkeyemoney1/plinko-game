@@ -312,7 +312,8 @@ export async function setWebhook(webhookUrl: string, secretToken: string): Promi
       url: webhookUrl,
       secret_token: secretToken,
       drop_pending_updates: true,
-      allowed_updates: ['message']
+      // Разрешаем также pre_checkout_query для подтверждения платежей
+      allowed_updates: ['message', 'pre_checkout_query']
     });
     console.log('Webhook установлен:', res);
     return true;
@@ -331,5 +332,20 @@ export async function getWebhookInfo(): Promise<any> {
   } catch (e) {
     console.error('Ошибка getWebhookInfo:', e);
     throw e;
+  }
+}
+
+/**
+ * Подтверждает pre_checkout_query (обязательный шаг для некоторых платежей)
+ */
+export async function answerPreCheckoutQuery(id: string, ok: boolean, errorMessage?: string): Promise<boolean> {
+  try {
+    const params: any = { pre_checkout_query_id: id, ok };
+    if (!ok && errorMessage) params.error_message = errorMessage;
+    await makeBotAPIRequest('answerPreCheckoutQuery', params);
+    return true;
+  } catch (e) {
+    console.error('Ошибка answerPreCheckoutQuery:', e);
+    return false;
   }
 }
