@@ -116,20 +116,21 @@
     
     try {
       // Инициируем платеж Stars через новый API
+      const starsInt = Math.max(1, Math.round(Number(starsDepositAmount)));
       const res = await fetch('/api/payments/stars/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           telegram_id: telegramId,  // Изменено с user_id на telegram_id
-          amount: starsDepositAmount,
+          amount: starsInt,
           description: `Пополнение баланса игры на ${starsDepositAmount} Stars`
         })
       });
       
       if (res.ok) {
-        const data = await res.json();
-        // Зафиксируем сумму на момент создания инвойса, чтобы не потерять ее при сбросе состояния
-        const payAmount = Number(starsDepositAmount);
+  const data = await res.json();
+  // Используем нормализованную сумму для платежа
+  const payAmount = starsInt;
         
         // Используем Telegram WebApp API для создания инвойса
         if (window.Telegram?.WebApp?.openInvoice) {
@@ -533,9 +534,10 @@
           <button class="absolute top-2 right-2 text-gray-400 hover:text-white text-xl" onclick={closeStarsDepositModal}>&times;</button>
           <img src="/ton_symbol (1).png" alt="Stars" class="w-16 h-16 mb-4" />
           <div class="text-yellow-400 text-lg font-bold mb-4">Пополнение Stars</div>
-          <div class="w-full mb-4">
-            <input type="number" min="0" step="0.01" bind:value={starsDepositAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center" placeholder="Сумма для пополнения" />
+          <div class="w-full mb-2">
+            <input type="number" min="1" step="1" bind:value={starsDepositAmount} class="w-full rounded px-3 py-2 bg-slate-900 text-white text-center" placeholder="Сумма (целые ⭐)" />
           </div>
+          <div class="text-xs text-gray-400 mb-4 text-center">Telegram Stars списываются целыми единицами</div>
           <button class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 py-2 rounded-xl font-semibold" onclick={processStarsDeposit}>
             Пополнить
           </button>

@@ -39,11 +39,13 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
     const { 
       telegram_id, 
       payload, 
-      amount,
+      amount: rawAmount,
       telegram_payment_charge_id = '',
       provider_payment_charge_id = '',
       initData 
     } = body;
+    // Stars списываются целыми — приводим к целому
+    const amount = Math.round(Number(rawAmount));
 
     // Валидация входных данных
     if (!telegram_id || !payload || !amount) {
@@ -93,7 +95,7 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
     }
 
     // 3. Проверяем соответствие суммы
-    if (transaction.amount !== amount) {
+    if (Number(transaction.amount) !== Number(amount)) {
       await client.query('ROLLBACK');
       return json({
         success: false,
@@ -130,7 +132,7 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
     }
 
     // 5. Зачисляем Stars на баланс пользователя
-    const newStarsBalance = parseFloat(transaction.stars_balance) + amount;
+  const newStarsBalance = parseFloat(transaction.stars_balance) + Number(amount);
 
     await client.query(`
       UPDATE users 

@@ -31,8 +31,10 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
   const client = await pool.connect();
   
   try {
-    const body: InitiateStarsPaymentRequest = await request.json();
-    const { telegram_id, amount, initData } = body;
+  const body: InitiateStarsPaymentRequest = await request.json();
+  const { telegram_id, initData } = body;
+  // Приводим сумму к целому количеству Stars
+  const amount = Math.round(Number((body as any).amount));
 
     // Валидация входных данных
     if (!telegram_id || !amount) {
@@ -42,10 +44,10 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
       }, { status: 400 });
     }
 
-    if (amount <= 0 || amount > 10000) {
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) {
       return json({
         success: false,
-        error: 'Некорректная сумма. Должна быть от 1 до 10000 Stars'
+        error: 'Некорректная сумма. Должна быть целым числом от 1 до 1,000,000 Stars'
       }, { status: 400 });
     }
 
