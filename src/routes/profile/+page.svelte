@@ -128,14 +128,17 @@
       
       if (res.ok) {
         const data = await res.json();
+        // Зафиксируем сумму на момент создания инвойса, чтобы не потерять ее при сбросе состояния
+        const payAmount = Number(starsDepositAmount);
         
         // Используем Telegram WebApp API для создания инвойса
         if (window.Telegram?.WebApp?.openInvoice) {
           // Открываем инвойс в Telegram
-          window.Telegram.WebApp.openInvoice(data.invoice_link, (status) => {
+          const link = data.invoice_link || data.invoice_url;
+          window.Telegram.WebApp.openInvoice(link, (status) => {
             if (status === 'paid') {
               // Верификация платежа
-              verifyStarsPayment(data.payload);
+              verifyStarsPayment(data.payload, payAmount);
             } else if (status === 'cancelled') {
               alert('Платеж был отменен');
             } else if (status === 'failed') {
@@ -148,10 +151,11 @@
           closeStarsDepositModal();
         } else {
           // Fallback: показываем ссылку для оплаты
-          if (confirm(`Создан инвойс на ${starsDepositAmount} Stars. Открыть ссылку для оплаты?`)) {
-            window.open(data.invoice_link, '_blank');
+          if (confirm(`Создан инвойс на ${payAmount} Stars. Открыть ссылку для оплаты?`)) {
+            const link = data.invoice_link || data.invoice_url;
+            window.open(link, '_blank');
             // В этом случае нужно будет проверять статус платежа вручную
-            setTimeout(() => verifyStarsPayment(data.payload), 5000);
+            setTimeout(() => verifyStarsPayment(data.payload, payAmount), 5000);
           }
           starsDepositAmount = 0;
           closeStarsDepositModal();
@@ -166,7 +170,7 @@
     }
   }
   
-  async function verifyStarsPayment(payload: string) {
+  async function verifyStarsPayment(payload: string, amount: number) {
     try {
       // Получаем telegram_id аналогично processStarsDeposit
       let telegramId = null;
@@ -194,14 +198,14 @@
         body: JSON.stringify({ 
           payload,
           telegram_id: telegramId,
-          amount: starsDepositAmount // Передаем amount для проверки
+          amount // Передаем точную сумму для проверки
         })
       });
       
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
-          alert(`Платеж подтвержден! Баланс пополнен на ${data.amount} Stars`);
+          alert(`Платеж подтвержден! Баланс пополнен на ${amount} Stars`);
           loadBalance();
         } else {
           alert('Платеж не подтвержден. Попробуйте позже.');

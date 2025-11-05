@@ -22,7 +22,8 @@ interface InitiateStarsPaymentRequest {
 interface InitiateStarsPaymentResponse {
   success: boolean;
   payload?: string;
-  invoice_url?: string;
+  invoice_url?: string; // устаревшее имя
+  invoice_link?: string; // основное имя поля для клиента
   error?: string;
 }
 
@@ -138,8 +139,9 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
     return json({
       success: true,
       payload,
-      invoice_url: invoiceUrl
-    });
+      invoice_url: invoiceUrl,
+      invoice_link: invoiceUrl
+    } satisfies InitiateStarsPaymentResponse);
 
   } catch (error) {
     await client.query('ROLLBACK');

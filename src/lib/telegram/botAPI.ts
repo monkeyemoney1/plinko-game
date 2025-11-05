@@ -2,9 +2,11 @@
  * Утилиты для работы с Telegram Bot API
  * Проверка Stars баланса, создание и подтверждение платежей
  */
+import { env as privateEnv } from '$env/dynamic/private';
 
-export const BOT_TOKEN = '8401593144:AAHIzxiGfGlZ2GQ8h8Y6y-W_9ZPxqCupGIU';
-export const BOT_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
+// Токен берем из приватных переменных окружения, не хардкодим в репозитории
+const BOT_TOKEN = privateEnv.TELEGRAM_BOT_TOKEN || '';
+const BOT_API_URL = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
 export interface TelegramBotUser {
   id: number;
@@ -29,6 +31,9 @@ export interface StarTransaction {
  */
 async function makeBotAPIRequest(method: string, params: any = {}): Promise<any> {
   try {
+    if (!BOT_TOKEN) {
+      throw new Error('TELEGRAM_BOT_TOKEN не задан в окружении');
+    }
     const url = `${BOT_API_URL}/${method}`;
     const response = await fetch(url, {
       method: 'POST',
