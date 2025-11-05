@@ -524,6 +524,9 @@
         <span class="text-gray-300">Баланс ⭐️Stars:</span>
     <span class="font-bold text-yellow-400 flex items-center gap-1">
       {Number($balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ⭐️
+      <button class="ml-1 bg-slate-700 hover:bg-slate-600 text-yellow-300 rounded-full px-2 py-0.5 text-xs flex items-center" style="height:1.5em;" title="Пополнить Stars" onclick={handleStarsDeposit}>
+        +
+      </button>
     {#if isStarsDepositModalOpen}
       <div class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
         <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-xs flex flex-col items-center relative">
