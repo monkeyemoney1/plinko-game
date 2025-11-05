@@ -302,3 +302,22 @@ export async function testBotConnection(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Регистрирует webhook для получения успешных платежей
+ */
+export async function setWebhook(webhookUrl: string, secretToken: string): Promise<boolean> {
+  try {
+    const res = await makeBotAPIRequest('setWebhook', {
+      url: webhookUrl,
+      secret_token: secretToken,
+      drop_pending_updates: true,
+      allowed_updates: ['message']
+    });
+    console.log('Webhook установлен:', res);
+    return true;
+  } catch (e) {
+    console.error('Ошибка установки webhook:', e);
+    return false;
+  }
+}

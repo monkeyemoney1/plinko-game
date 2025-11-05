@@ -79,11 +79,21 @@ export const POST = async ({ request }: RequestEvent): Promise<Response> => {
 
     // 2. Проверяем, не была ли транзакция уже обработана
     if (transaction.status === 'completed') {
+      // Возвращаем успешный ответ идемпотентно
+      const updatedUserResult = await client.query(
+        'SELECT stars_balance, ton_balance FROM users WHERE id = $1',
+        [transaction.user_id]
+      );
+      const updatedBalance = updatedUserResult.rows[0];
       await client.query('ROLLBACK');
       return json({
-        success: false,
-        error: 'Транзакция уже была обработана ранее'
-      }, { status: 409 });
+        success: true,
+        transaction_id: transaction.id,
+        balance: {
+          stars_balance: parseFloat(updatedBalance.stars_balance),
+          ton_balance: parseFloat(updatedBalance.ton_balance)
+        }
+      });
     }
 
     if (transaction.status === 'failed' || transaction.status === 'cancelled') {
