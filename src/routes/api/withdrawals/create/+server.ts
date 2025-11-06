@@ -138,190 +138,30 @@ export const POST: RequestHandler = async ({ request }) => {
 
       console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${feeInfo.grossAmount} TON (net: ${feeInfo.netAmount}, fee: ${feeInfo.fee})`);
 
-      // Немедленно отправляем средства через блокчейн
-  console.log(`[Withdrawal ${withdrawalId}] Starting automatic TON transfer...`);
-
-      await client.query('BEGIN');
-      
-  try {
-        // Обновляем статус на "в обработке"
-        await client.query(
-          'UPDATE withdrawals SET status = $1 WHERE id = $2',
-          [WITHDRAWAL_CONFIG.STATUSES.PROCESSING, withdrawalId]
-        );
-        
-        await client.query('COMMIT');
-        
-        // Отправляем транзакцию в блокчейн TON через стабильный helper
-        const network = privateEnv.TON_NETWORK || 'mainnet';
-        const primaryApiKey = privateEnv.TON_API_KEY || privateEnv.TONCENTER_API_KEY;
-        const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
-
-        if (!mnemonic) {
-          throw new Error('Wallet mnemonic is not configured');
+      // НЕ отправляем транзакцию в этом запросе.
+      // Ставим в очередь и инициируем авто-обработку в фоне, чтобы не упираться в 429 в рамках одного HTTP цикла.
+      ;(async () => {
+        try {
+          await fetch('/api/withdrawals/auto-process', { method: 'POST' });
+        } catch (e) {
+          console.warn(`[Withdrawal ${withdrawalId}] Failed to trigger auto-process:`, e);
         }
+      })();
 
-        // Унифицированная функция одной попытки отправки
-        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-        const trySend = async (endpoint: string, apiKey?: string) => {
-          console.log(`[Withdrawal ${withdrawalId}] Try send via ${endpoint} ${apiKey ? '(with key)' : '(no key)'}`);
-          const tonClient = ton.createTonClient({ network, apiKey, endpoint });
-          const sender = await ton.openGameWallet(tonClient, mnemonic);
-
-          // Убираем дополнительный запрос баланса, чтобы не провоцировать 429
-
-          let beforeSeqno = 0;
-          // 5 попыток с экспоненциальной задержкой (актуально при 429 Too Many Requests)
-          for (let attempt = 1; attempt <= 5; attempt++) {
-            try {
-              beforeSeqno = await sender.contract.getSeqno();
-              console.log(`[Withdrawal ${withdrawalId}] Seqno ${beforeSeqno}, attempt ${attempt}: sending ${feeInfo.netAmount} TON to ${wallet_address}`);
-              await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
-              const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 90000, 4000);
-              return { confirmed, beforeSeqno };
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              console.warn(`[Withdrawal ${withdrawalId}] Send attempt ${attempt} failed: ${msg}`);
-              if (attempt < 5) {
-                // При 429 или сетевых сбоях ждём дольше
-                const base = msg.includes('429') || msg.includes('Too Many') ? 3000 : 1500;
-                const delay = base * Math.pow(2, attempt - 1);
-                console.log(`[Withdrawal ${withdrawalId}] Backoff ${delay}ms before retry`);
-                await sleep(delay);
-                continue;
-              }
-              throw e;
-            }
-          }
-          // недостижимо
-          return { confirmed: false, beforeSeqno };
-        };
-
-        // Стратегия отказоустойчивости: toncenter с ключом -> toncenter без ключа
-        // (убран tonapi JSON-RPC, чтобы не ловить 404: у tonapi другой протокол)
-        const endpoints: Array<{ endpoint: string; apiKey?: string }> = [];
-        if (network === 'mainnet') {
-          if (primaryApiKey) endpoints.push({ endpoint: 'https://toncenter.com/api/v2/jsonRPC', apiKey: primaryApiKey });
-          endpoints.push({ endpoint: 'https://toncenter.com/api/v2/jsonRPC' });
-        } else {
-          if (primaryApiKey) endpoints.push({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC', apiKey: primaryApiKey });
-          endpoints.push({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC' });
-        }
-
-        let confirmed = false;
-        let beforeSeqno = 0;
-        let lastErr: unknown = null;
-        for (const cfg of endpoints) {
-          try {
-            const res = await trySend(cfg.endpoint, cfg.apiKey);
-            confirmed = res.confirmed;
-            beforeSeqno = res.beforeSeqno;
-            if (confirmed) {
-              console.log(`[Withdrawal ${withdrawalId}] Transaction confirmed via ${cfg.endpoint}`);
-              lastErr = null;
-              break;
-            }
-          } catch (err) {
-            lastErr = err;
-            const msg = err instanceof Error ? err.message : String(err);
-            console.warn(`[Withdrawal ${withdrawalId}] Provider failed (${cfg.endpoint}): ${msg}`);
-            // Если лимит, подождём перед переходом к следующему провайдеру
-            if (msg.includes('429') || msg.includes('Too Many')) {
-              await sleep(5000);
-            }
-            // Повторяем на следующем провайдере
-          }
-        }
-
-        if (!confirmed) {
-          // Если все провайдеры дали сбой — бросаем последнюю ошибку, чтобы сработал рефанд
-          throw lastErr || new Error('All TON providers failed');
-        }
-
-        await client.query('BEGIN');
-        
-        if (confirmed) {
-          // Успешная отправка - обновляем статус на "завершено"
-          await client.query(
-            `UPDATE withdrawals 
-             SET status = $1, 
-                 transaction_hash = $2, 
-                 completed_at = NOW() 
-             WHERE id = $3`,
-            [WITHDRAWAL_CONFIG.STATUSES.COMPLETED, `seqno_${beforeSeqno}_w${withdrawalId}`, withdrawalId]
-          );
-          
-          await client.query('COMMIT');
-          
-          console.log(`[Withdrawal ${withdrawalId}] Successfully completed!`);
-          
-          return json({
-            success: true,
-            withdrawal: {
-              id: withdrawalId,
-              user_id,
-              gross_amount: feeInfo.grossAmount,
-              net_amount: feeInfo.netAmount,
-              fee: feeInfo.fee,
-              wallet_address,
-              status: WITHDRAWAL_CONFIG.STATUSES.COMPLETED,
-              transaction_hash: `seqno_${beforeSeqno}_w${withdrawalId}`,
-              created_at: withdrawalResult.rows[0].created_at
-            },
-            message: `Средства успешно отправлены! Сумма: ${feeInfo.netAmount} TON`
-          });
-          
-        } else {
-          // Ошибка отправки - обновляем статус на "ошибка" и возвращаем средства
-          await client.query(
-            `UPDATE withdrawals 
-             SET status = $1, 
-                 error_message = $2 
-             WHERE id = $3`,
-            [WITHDRAWAL_CONFIG.STATUSES.FAILED, 'Transaction not confirmed in time', withdrawalId]
-          );
-          
-          // Возвращаем средства на баланс пользователя
-          await client.query(
-            'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
-            [feeInfo.grossAmount, user_id]
-          );
-          
-          await client.query('COMMIT');
-          
-          console.error(`[Withdrawal ${withdrawalId}] Failed: not confirmed`);
-          
-          return json({
-            success: false,
-            error: 'Ошибка отправки средств: не подтверждена транзакция. Средства возвращены на баланс.'
-          }, { status: 500 });
-        }
-        
-      } catch (processError) {
-        await client.query('ROLLBACK');
-        
-        // При ошибке обработки возвращаем средства
-        await client.query('BEGIN');
-        await client.query(
-          `UPDATE withdrawals 
-           SET status = $1, 
-               error_message = $2 
-           WHERE id = $3`,
-          [WITHDRAWAL_CONFIG.STATUSES.FAILED, String(processError), withdrawalId]
-        );
-        await client.query(
-          'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
-          [feeInfo.grossAmount, user_id]
-        );
-        await client.query('COMMIT');
-        
-        console.error(`[Withdrawal ${withdrawalId}] Processing error:`, processError);
-        
-        return json({
-          success: false,
-          error: `Ошибка обработки вывода: ${processError instanceof Error ? processError.message : String(processError)}. Средства возвращены на баланс.`
-        }, { status: 500 });
-      }
+      return json({
+        success: true,
+        withdrawal: {
+          id: withdrawalId,
+          user_id,
+          gross_amount: feeInfo.grossAmount,
+          net_amount: feeInfo.netAmount,
+          fee: feeInfo.fee,
+          wallet_address,
+          status: status,
+          created_at: withdrawalResult.rows[0].created_at
+        },
+        message: 'Заявка на вывод создана и поставлена в очередь. Обработка начнется автоматически.'
+      });
 
     } catch (dbError) {
       await client.query('ROLLBACK');
