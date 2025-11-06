@@ -185,7 +185,7 @@ export const POST: RequestHandler = async ({ request }) => {
               beforeSeqno = await sender.contract.getSeqno();
               console.log(`[Withdrawal ${withdrawalId}] Seqno ${beforeSeqno}, attempt ${attempt}: sending ${feeInfo.netAmount} TON to ${wallet_address}`);
               await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
-              const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+              const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 90000, 4000);
               return { confirmed, beforeSeqno };
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
