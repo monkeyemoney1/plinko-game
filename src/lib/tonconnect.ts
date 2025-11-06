@@ -9,8 +9,8 @@ if (browser) {
     const twaReturnUrl = `https://t.me/${botUsername}/app`;
     tonConnectUI = new TonConnectUI({
         manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json',
-        // Отключаем автовосстановление и Android back handler для стабильности
-        restoreConnection: false,
+        // Восстанавливаем сессию после возврата из кошелька (важно для Telegram Desktop)
+        restoreConnection: true,
         enableAndroidBackHandler: false,
         actionsConfiguration: {
             twaReturnUrl: twaReturnUrl as unknown as `${string}://${string}`

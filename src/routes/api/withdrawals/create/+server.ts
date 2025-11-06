@@ -168,19 +168,11 @@ export const POST: RequestHandler = async ({ request }) => {
           const tonClient = ton.createTonClient({ network, apiKey, endpoint });
           const sender = await ton.openGameWallet(tonClient, mnemonic);
 
-          // Проверка баланса — необязательна, но полезна для логов
-          try {
-            const mod = await import('@ton/ton');
-            const balance = await sender.contract.getBalance();
-            const balTon = parseFloat(mod.fromNano(balance));
-            console.log(`[Withdrawal ${withdrawalId}] Game wallet balance: ${balTon} TON`);
-          } catch (e) {
-            console.warn(`[Withdrawal ${withdrawalId}] Balance check skipped:`, e instanceof Error ? e.message : String(e));
-          }
+          // Убираем дополнительный запрос баланса, чтобы не провоцировать 429
 
           let beforeSeqno = 0;
-          // 3 попытки с экспоненциальной задержкой (актуально при 429 Too Many Requests)
-          for (let attempt = 1; attempt <= 3; attempt++) {
+          // 5 попыток с экспоненциальной задержкой (актуально при 429 Too Many Requests)
+          for (let attempt = 1; attempt <= 5; attempt++) {
             try {
               beforeSeqno = await sender.contract.getSeqno();
               console.log(`[Withdrawal ${withdrawalId}] Seqno ${beforeSeqno}, attempt ${attempt}: sending ${feeInfo.netAmount} TON to ${wallet_address}`);
@@ -190,8 +182,10 @@ export const POST: RequestHandler = async ({ request }) => {
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
               console.warn(`[Withdrawal ${withdrawalId}] Send attempt ${attempt} failed: ${msg}`);
-              if (attempt < 3) {
-                const delay = 1500 * attempt;
+              if (attempt < 5) {
+                // При 429 или сетевых сбоях ждём дольше
+                const base = msg.includes('429') || msg.includes('Too Many') ? 3000 : 1500;
+                const delay = base * Math.pow(2, attempt - 1);
                 console.log(`[Withdrawal ${withdrawalId}] Backoff ${delay}ms before retry`);
                 await sleep(delay);
                 continue;
@@ -231,6 +225,10 @@ export const POST: RequestHandler = async ({ request }) => {
             lastErr = err;
             const msg = err instanceof Error ? err.message : String(err);
             console.warn(`[Withdrawal ${withdrawalId}] Provider failed (${cfg.endpoint}): ${msg}`);
+            // Если лимит, подождём перед переходом к следующему провайдеру
+            if (msg.includes('429') || msg.includes('Too Many')) {
+              await sleep(5000);
+            }
             // Повторяем на следующем провайдере
           }
         }
