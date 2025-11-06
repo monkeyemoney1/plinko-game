@@ -3,7 +3,7 @@
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
-  import { PUBLIC_TELEGRAM_BOT_USERNAME } from '$env/static/public';
+  import { env as publicEnv } from '$env/dynamic/public';
   import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
 
   let tonConnectUI: TonConnectUI;
@@ -33,7 +33,7 @@
     
     // Инициализируем TON Connect UI
     // Для Telegram Desktop важно указать URL возврата, чтобы окно мини-аппа не закрывалось
-    const botUsername = PUBLIC_TELEGRAM_BOT_USERNAME || 'PlinkoStarsBot';
+  const botUsername = publicEnv.PUBLIC_TELEGRAM_BOT_USERNAME || 'PlinkoStarsBot';
     const twaReturnUrl = `https://t.me/${botUsername}/app`;
     tonConnectUI = new TonConnectUI({
       manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json',
