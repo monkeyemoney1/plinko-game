@@ -162,6 +162,7 @@ export const POST: RequestHandler = async ({ request }) => {
         }
 
         // Унифицированная функция одной попытки отправки
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
         const trySend = async (endpoint: string, apiKey?: string) => {
           console.log(`[Withdrawal ${withdrawalId}] Try send via ${endpoint} ${apiKey ? '(with key)' : '(no key)'}`);
           const tonClient = ton.createTonClient({ network, apiKey, endpoint });
@@ -177,12 +178,29 @@ export const POST: RequestHandler = async ({ request }) => {
             console.warn(`[Withdrawal ${withdrawalId}] Balance check skipped:`, e instanceof Error ? e.message : String(e));
           }
 
-          const beforeSeqno = await sender.contract.getSeqno();
-          console.log(`[Withdrawal ${withdrawalId}] Seqno ${beforeSeqno}, sending ${feeInfo.netAmount} TON to ${wallet_address}`);
-
-          await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
-          const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
-          return { confirmed, beforeSeqno };
+          let beforeSeqno = 0;
+          // 3 попытки с экспоненциальной задержкой (актуально при 429 Too Many Requests)
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              beforeSeqno = await sender.contract.getSeqno();
+              console.log(`[Withdrawal ${withdrawalId}] Seqno ${beforeSeqno}, attempt ${attempt}: sending ${feeInfo.netAmount} TON to ${wallet_address}`);
+              await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
+              const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+              return { confirmed, beforeSeqno };
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.warn(`[Withdrawal ${withdrawalId}] Send attempt ${attempt} failed: ${msg}`);
+              if (attempt < 3) {
+                const delay = 1500 * attempt;
+                console.log(`[Withdrawal ${withdrawalId}] Backoff ${delay}ms before retry`);
+                await sleep(delay);
+                continue;
+              }
+              throw e;
+            }
+          }
+          // недостижимо
+          return { confirmed: false, beforeSeqno };
         };
 
         // Стратегия отказоустойчивости: toncenter с ключом -> toncenter без ключа
