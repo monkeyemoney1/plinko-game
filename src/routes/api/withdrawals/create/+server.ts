@@ -185,12 +185,12 @@ export const POST: RequestHandler = async ({ request }) => {
           return { confirmed, beforeSeqno };
         };
 
-        // Стратегия отказоустойчивости: toncenter с ключом -> toncenter без ключа -> tonapi без ключа
+        // Стратегия отказоустойчивости: toncenter с ключом -> toncenter без ключа
+        // (убран tonapi JSON-RPC, чтобы не ловить 404: у tonapi другой протокол)
         const endpoints: Array<{ endpoint: string; apiKey?: string }> = [];
         if (network === 'mainnet') {
           if (primaryApiKey) endpoints.push({ endpoint: 'https://toncenter.com/api/v2/jsonRPC', apiKey: primaryApiKey });
           endpoints.push({ endpoint: 'https://toncenter.com/api/v2/jsonRPC' });
-          endpoints.push({ endpoint: 'https://tonapi.io/v2/jsonRPC' });
         } else {
           if (primaryApiKey) endpoints.push({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC', apiKey: primaryApiKey });
           endpoints.push({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC' });
