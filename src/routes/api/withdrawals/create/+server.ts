@@ -138,32 +138,165 @@ export const POST: RequestHandler = async ({ request }) => {
 
       console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${feeInfo.grossAmount} TON (net: ${feeInfo.netAmount}, fee: ${feeInfo.fee})`);
 
-      // НЕ отправляем транзакцию в этом запросе.
-      // Ставим в очередь и инициируем авто-обработку в фоне, чтобы не упираться в 429 в рамках одного HTTP цикла.
-      // Используем абсолютный URL, чтобы глобальный fetch на сервере корректно отработал.
-      ;(async () => {
-        try {
-          const origin = new URL(request.url).origin;
-          await fetch(`${origin}/api/withdrawals/auto-process`, { method: 'POST' });
-        } catch (e) {
-          console.warn(`[Withdrawal ${withdrawalId}] Failed to trigger auto-process:`, e);
-        }
-      })();
+      // Немедленно отправляем средства через блокчейн
+      console.log(`[Withdrawal ${withdrawalId}] Starting automatic TON transfer...`);
 
-      return json({
-        success: true,
-        withdrawal: {
-          id: withdrawalId,
-          user_id,
-          gross_amount: feeInfo.grossAmount,
-          net_amount: feeInfo.netAmount,
-          fee: feeInfo.fee,
-          wallet_address,
-          status: status,
-          created_at: withdrawalResult.rows[0].created_at
-        },
-        message: 'Заявка на вывод создана и поставлена в очередь. Обработка начнется автоматически.'
-      });
+      await client.query('BEGIN');
+      
+      try {
+        // Обновляем статус на "в обработке"
+        await client.query(
+          'UPDATE withdrawals SET status = $1 WHERE id = $2',
+          [WITHDRAWAL_CONFIG.STATUSES.PROCESSING, withdrawalId]
+        );
+        
+        await client.query('COMMIT');
+        
+        // Отправляем транзакцию в блокчейн TON через стабильный helper
+        const network = privateEnv.TON_NETWORK || 'mainnet';
+        // Используем только ключ toncenter (если он задан). TON_API_KEY (tonapi) не подходит для JSON-RPC toncenter
+        let finalApiKey: string | undefined = privateEnv.TONCENTER_API_KEY || undefined;
+        const endpoint: string = network === 'mainnet'
+          ? 'https://toncenter.com/api/v2/jsonRPC'
+          : 'https://testnet.toncenter.com/api/v2/jsonRPC';
+        
+        const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
+
+        if (!mnemonic) {
+          throw new Error('Wallet mnemonic is not configured');
+        }
+
+  console.log(`[Withdrawal ${withdrawalId}] Using network: ${network}, endpoint: ${endpoint}`);
+  console.log(`[Withdrawal ${withdrawalId}] TONCENTER_API_KEY configured: ${finalApiKey ? 'YES' : 'NO'}`);
+        console.log(`[Withdrawal ${withdrawalId}] Mnemonic configured: ${mnemonic ? 'YES' : 'NO'}`);
+
+        let tonClient, sender;
+        
+        // Создаём клиент с ключом toncenter (если он есть). При ошибке пробуем без ключа на том же endpoint
+        try {
+          tonClient = ton.createTonClient({ network, apiKey: finalApiKey, endpoint });
+          console.log(`[Withdrawal ${withdrawalId}] TON client created successfully`);
+          sender = await ton.openGameWallet(tonClient, mnemonic);
+          console.log(`[Withdrawal ${withdrawalId}] Game wallet opened successfully`);
+        } catch (clientError) {
+          if (finalApiKey) {
+            console.warn(`[Withdrawal ${withdrawalId}] Failed with TONCENTER_API_KEY, retrying without key:`, clientError instanceof Error ? clientError.message : String(clientError));
+            finalApiKey = undefined;
+            tonClient = ton.createTonClient({ network, apiKey: finalApiKey, endpoint });
+            sender = await ton.openGameWallet(tonClient, mnemonic);
+            console.log(`[Withdrawal ${withdrawalId}] Connected without API key`);
+          } else {
+            throw clientError;
+          }
+        }
+
+        // Проверим баланс кошелька (не блокируем, только информируем)
+        try {
+          const mod = await import('@ton/ton');
+          const balance = await sender.contract.getBalance();
+          const balTon = parseFloat(mod.fromNano(balance));
+          console.log(`[Withdrawal ${withdrawalId}] Game wallet balance: ${balTon} TON`);
+          
+          if (balTon < feeInfo.netAmount + 0.1) {
+            console.warn(`[Withdrawal ${withdrawalId}] Warning: Low wallet balance. Required: ${feeInfo.netAmount}, Available: ${balTon}`);
+          }
+        } catch (balanceError) {
+          console.warn(`[Withdrawal ${withdrawalId}] Could not check wallet balance:`, balanceError instanceof Error ? balanceError.message : String(balanceError));
+        }
+
+        const beforeSeqno = await sender.contract.getSeqno();
+        console.log(`[Withdrawal ${withdrawalId}] Current wallet seqno: ${beforeSeqno}, sending ${feeInfo.netAmount} TON to ${wallet_address}`);
+        
+        await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
+        console.log(`[Withdrawal ${withdrawalId}] Transaction sent, waiting for confirmation...`);
+        
+        const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+        console.log(`[Withdrawal ${withdrawalId}] Transaction confirmed: ${confirmed}`);
+
+        await client.query('BEGIN');
+        
+        if (confirmed) {
+          // Успешная отправка - обновляем статус на "завершено"
+          await client.query(
+            `UPDATE withdrawals 
+             SET status = $1, 
+                 transaction_hash = $2, 
+                 completed_at = NOW() 
+             WHERE id = $3`,
+            [WITHDRAWAL_CONFIG.STATUSES.COMPLETED, `seqno_${beforeSeqno}_w${withdrawalId}`, withdrawalId]
+          );
+          
+          await client.query('COMMIT');
+          
+          console.log(`[Withdrawal ${withdrawalId}] Successfully completed!`);
+          
+          return json({
+            success: true,
+            withdrawal: {
+              id: withdrawalId,
+              user_id,
+              gross_amount: feeInfo.grossAmount,
+              net_amount: feeInfo.netAmount,
+              fee: feeInfo.fee,
+              wallet_address,
+              status: WITHDRAWAL_CONFIG.STATUSES.COMPLETED,
+              transaction_hash: `seqno_${beforeSeqno}_w${withdrawalId}`,
+              created_at: withdrawalResult.rows[0].created_at
+            },
+            message: `Средства успешно отправлены! Сумма: ${feeInfo.netAmount} TON`
+          });
+          
+        } else {
+          // Ошибка отправки - обновляем статус на "ошибка" и возвращаем средства
+          await client.query(
+            `UPDATE withdrawals 
+             SET status = $1, 
+                 error_message = $2 
+             WHERE id = $3`,
+            [WITHDRAWAL_CONFIG.STATUSES.FAILED, 'Transaction not confirmed in time', withdrawalId]
+          );
+          
+          // Возвращаем средства на баланс пользователя
+          await client.query(
+            'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
+            [feeInfo.grossAmount, user_id]
+          );
+          
+          await client.query('COMMIT');
+          
+          console.error(`[Withdrawal ${withdrawalId}] Failed: not confirmed`);
+          
+          return json({
+            success: false,
+            error: 'Ошибка отправки средств: не подтверждена транзакция. Средства возвращены на баланс.'
+          }, { status: 500 });
+        }
+        
+      } catch (processError) {
+        await client.query('ROLLBACK');
+        
+        // При ошибке обработки возвращаем средства
+        await client.query('BEGIN');
+        await client.query(
+          `UPDATE withdrawals 
+           SET status = $1, 
+               error_message = $2 
+           WHERE id = $3`,
+          [WITHDRAWAL_CONFIG.STATUSES.FAILED, String(processError), withdrawalId]
+        );
+        await client.query(
+          'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
+          [feeInfo.grossAmount, user_id]
+        );
+        await client.query('COMMIT');
+        
+        console.error(`[Withdrawal ${withdrawalId}] Processing error:`, processError);
+        
+        return json({
+          success: false,
+          error: `Ошибка обработки вывода: ${processError instanceof Error ? processError.message : String(processError)}. Средства возвращены на баланс.`
+        }, { status: 500 });
+      }
 
     } catch (dbError) {
       await client.query('ROLLBACK');

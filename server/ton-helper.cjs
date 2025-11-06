@@ -35,12 +35,12 @@ async function sendTon(client, sender, to, amountTon, comment) {
   return { seqno };
 }
 
-async function waitSeqno(client, wallet, startSeqno, timeoutMs = 60000, intervalMs = 4000) {
+async function waitSeqno(client, wallet, startSeqno, timeoutMs = 60000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const current = await wallet.getSeqno();
     if (current > startSeqno) return true;
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((r) => setTimeout(r, 2000));
   }
   return false;
 }

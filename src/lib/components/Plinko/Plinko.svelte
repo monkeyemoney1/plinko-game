@@ -8,27 +8,14 @@
 
   const { WIDTH, HEIGHT } = PlinkoEngine;
 
-  // Локальный флаг инициализации, чтобы не зависеть от реактивности стора в условиях встроенного WebView
-  let initialized = false;
-
   const initPlinko: Action<HTMLCanvasElement> = (node) => {
-    try {
-      const engine = new PlinkoEngine(node);
-      plinkoEngine.set(engine);
-      engine.start();
-      initialized = true;
-    } catch (e) {
-      console.error('Plinko init failed:', e);
-    }
+    $plinkoEngine = new PlinkoEngine(node);
+    $plinkoEngine.start();
 
     return {
       destroy: () => {
-        try {
-          $plinkoEngine?.stop();
-        } finally {
-          plinkoEngine.set(null);
-        }
-        initialized = false;
+        $plinkoEngine?.stop();
+        $plinkoEngine = null;
       },
     };
   };
@@ -37,7 +24,7 @@
 <div class="relative bg-gray-900">
   <div class="mx-auto flex h-full flex-col px-4 pb-4" style:max-width={`${WIDTH}px`}>
     <div class="relative w-full" style:aspect-ratio={`${WIDTH} / ${HEIGHT}`}>
-      {#if !initialized}
+      {#if $plinkoEngine === null}
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
           <CircleNotch class="size-20 animate-spin text-slate-600" weight="bold" />
         </div>

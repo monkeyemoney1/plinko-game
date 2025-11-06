@@ -13,16 +13,9 @@ const { Client } = pg;
 async function migrate() {
   console.log('🚀 Starting database migration...');
   
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.warn('⚠️  DATABASE_URL is not set; skipping migrations');
-    return;
-  }
-
-  const sslOption = process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false;
   const client = new Client({
-    connectionString,
-    ssl: sslOption
+    connectionString: process.env.DATABASE_URL,
+    ssl: false  // Отключаем SSL для локальной базы данных
   });
 
   try {
@@ -108,10 +101,7 @@ async function migrate() {
       console.log('📊 Database is ready');
     } else {
       console.error('❌ Migration failed:', error);
-      // Не блокируем запуск приложения на проде: позволяем серверу стартовать, а миграции выполнить вручную
-      if (process.env.NODE_ENV !== 'production') {
-        process.exit(1);
-      }
+      process.exit(1);
     }
   } finally {
     await client.end();
