@@ -2,12 +2,12 @@
   import '$lib/polyfills';
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
-  import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
+  import { toUserFriendlyAddress } from '@tonconnect/ui';
   import { normalizeAddressClient } from '$lib/ton-utils';
   import { env as publicEnv } from '$env/dynamic/public';
   import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
-
-  let tonConnectUI: TonConnectUI;
+  import { tonConnectUI } from '$lib/tonconnect';
+  
   
   // Игровой баланс TON и Stars
   import { balance } from '$lib/stores/game';
@@ -36,19 +36,11 @@
     // Для Telegram Desktop важно указать URL возврата, чтобы окно мини-аппа не закрывалось
   const botUsername = publicEnv.PUBLIC_TELEGRAM_BOT_USERNAME || 'PlinkoStarsBot';
     const twaReturnUrl = `https://t.me/${botUsername}/app`;
-    tonConnectUI = new TonConnectUI({
-      manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json',
-      // Важно для Telegram Desktop: сохранять и восстанавливать сессию, чтобы мини-апп не закрывался
-      restoreConnection: true,
-      enableAndroidBackHandler: false,
-      actionsConfiguration: ({
-        // Явно указываем URL возврата в мини-апп бота
-        twaReturnUrl
-      } as any)
-    });
+    // Экземпляр TonConnectUI создаётся глобально в $lib/tonconnect с restoreConnection и twaReturnUrl
+    // Здесь только подписываемся на события при наличии UI
     
     // Отслеживаем изменения статуса подключения кошелька
-    tonConnectUI.onStatusChange((walletInfo) => {
+  tonConnectUI?.onStatusChange((walletInfo) => {
       if (walletInfo && walletInfo.account) {
         // Кошелек подключен - отслеживаем это в БД
         trackWalletConnection(walletInfo.account.address);
@@ -304,7 +296,7 @@
       };
 
       // Отправляем транзакцию
-      const result = await tonConnectUI.sendTransaction(transaction);
+  const result = await tonConnectUI?.sendTransaction(transaction);
 
       if (result) {
         alert('Транзакция отправлена! Ожидайте подтверждения...');
