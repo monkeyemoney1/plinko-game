@@ -3,6 +3,7 @@
   import logo from '$lib/assets/logo.svg';
   import { onMount } from 'svelte';
   import { TonConnectUI, toUserFriendlyAddress } from '@tonconnect/ui';
+  import { normalizeAddressClient } from '$lib/ton-utils';
   import { env as publicEnv } from '$env/dynamic/public';
   import { isTelegramWebApp, getTelegramUser } from '$lib/telegram/webApp';
 
@@ -37,9 +38,13 @@
     const twaReturnUrl = `https://t.me/${botUsername}/app`;
     tonConnectUI = new TonConnectUI({
       manifestUrl: 'https://plinko-game-9hku.onrender.com/.well-known/tonconnect-manifest.json',
-      actionsConfiguration: {
+      // Важно для Telegram Desktop: сохранять и восстанавливать сессию, чтобы мини-апп не закрывался
+      restoreConnection: true,
+      enableAndroidBackHandler: false,
+      actionsConfiguration: ({
+        // Явно указываем URL возврата в мини-апп бота
         twaReturnUrl
-      }
+      } as any)
     });
     
     // Отслеживаем изменения статуса подключения кошелька
@@ -117,7 +122,7 @@
     
     // Fallback: используем userId как telegram_id для тестирования
     if (!telegramId) {
-      telegramId = parseInt(userId) || 123456789; // Fallback ID для тестирования
+  telegramId = parseInt(userId || '0') || 123456789; // Fallback ID для тестирования
       console.log('Используем fallback Telegram ID:', telegramId);
     }
     
@@ -198,7 +203,7 @@
       // Fallback
       if (!telegramId) {
         const userId = localStorage.getItem('user_id');
-        telegramId = parseInt(userId) || 123456789;
+  telegramId = parseInt(userId || '0') || 123456789;
       }
       
       const res = await fetch('/api/payments/stars/verify', {
@@ -316,7 +321,7 @@
     }
   }
   
-  async function checkDepositStatus(userId, userAddress, verifyAmount) {
+  async function checkDepositStatus(userId: string, userAddress: string, verifyAmount: number) {
     const maxAttempts = 40; // Максимум 40 попыток (20 минут при проверке каждые 15 сек)
     let attempts = 0;
 
@@ -458,7 +463,7 @@
   }
   
   // Функция для расчета комиссии (локальная копия логики сервера)
-  function calculateFeeInfo(amount) {
+  function calculateFeeInfo(amount: number) {
     // Фиксированная комиссия 0.05 TON, без процентной части
     const FIXED_FEE = 0.05;
     const totalFee = FIXED_FEE;
@@ -511,6 +516,7 @@
     margin: 0;
   }
   input[type="number"] {
+    appearance: textfield;
     -moz-appearance: textfield;
   }
 </style>

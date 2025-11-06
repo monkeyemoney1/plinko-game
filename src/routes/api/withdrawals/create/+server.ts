@@ -140,9 +140,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // НЕ отправляем транзакцию в этом запросе.
       // Ставим в очередь и инициируем авто-обработку в фоне, чтобы не упираться в 429 в рамках одного HTTP цикла.
+      // Используем абсолютный URL, чтобы глобальный fetch на сервере корректно отработал.
       ;(async () => {
         try {
-          await fetch('/api/withdrawals/auto-process', { method: 'POST' });
+          const origin = new URL(request.url).origin;
+          await fetch(`${origin}/api/withdrawals/auto-process`, { method: 'POST' });
         } catch (e) {
           console.warn(`[Withdrawal ${withdrawalId}] Failed to trigger auto-process:`, e);
         }

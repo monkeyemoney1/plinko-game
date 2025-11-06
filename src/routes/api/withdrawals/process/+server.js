@@ -18,9 +18,10 @@ export const POST = async ({ request }) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Разрешаем обработку как для pending, так и для processing (авто-обработчик помечает запись как processing)
       const withdrawalResult = await client.query(
-        'SELECT * FROM withdrawals WHERE id = $1 AND status = $2',
-        [withdrawal_id, 'pending']
+        "SELECT * FROM withdrawals WHERE id = $1 AND status IN ('pending','processing')",
+        [withdrawal_id]
       );
       if (withdrawalResult.rows.length === 0) {
         await client.query('ROLLBACK');
