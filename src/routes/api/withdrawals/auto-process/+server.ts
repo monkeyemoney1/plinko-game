@@ -6,6 +6,9 @@ import { WITHDRAWAL_CONFIG } from '$lib/config/withdrawals';
 // POST - автоматическая обработка очереди выплат
 export const POST: RequestHandler = async ({ request, fetch }) => {
   try {
+    const origin = new URL(request.url).origin;
+    console.log('[AUTO-PROCESS] Starting auto-process, origin:', origin);
+    
     const client = await pool.connect();
     
     try {
@@ -19,28 +22,40 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       `, [WITHDRAWAL_CONFIG.STATUSES.PENDING]);
 
       const pendingWithdrawals = result.rows;
+      console.log(`[AUTO-PROCESS] Found ${pendingWithdrawals.length} pending withdrawals:`, pendingWithdrawals.map(w => ({ id: w.id, amount: w.amount, wallet: w.wallet_address })));
+      
+      if (pendingWithdrawals.length === 0) {
+        console.log('[AUTO-PROCESS] No pending withdrawals to process');
+        return json({ success: true, message: 'No pending withdrawals to process' });
+      }
+      
       const processedResults = [];
 
       for (const withdrawal of pendingWithdrawals) {
+        console.log(`[AUTO-PROCESS] Processing withdrawal ID ${withdrawal.id}, amount ${withdrawal.amount} TON to ${withdrawal.wallet_address}`);
         try {
           // Обновляем статус на "processing"
           await client.query(
             'UPDATE withdrawals SET status = $1 WHERE id = $2',
             [WITHDRAWAL_CONFIG.STATUSES.PROCESSING, withdrawal.id]
           );
+          console.log(`[AUTO-PROCESS] Updated withdrawal ${withdrawal.id} status to processing`);
 
           // Вызываем процессинг через абсолютный origin, чтобы гарантированно попасть на серверный маршрут
           try {
-            const origin = new URL(request.url).origin;
-            const processRes = await fetch(`${origin}/api/withdrawals/process`, {
+            const processUrl = `${origin}/api/withdrawals/process`;
+            console.log(`[AUTO-PROCESS] Calling ${processUrl} for withdrawal ${withdrawal.id}`);
+            const processRes = await fetch(processUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ withdrawal_id: withdrawal.id })
             });
             const text = await processRes.text();
+            console.log(`[AUTO-PROCESS] Process response for ${withdrawal.id}: status=${processRes.status}, body=${text.substring(0, 500)}`);
             let jsonBody = null;
             try { jsonBody = JSON.parse(text); } catch {}
             if (processRes.ok) {
+              console.log(`[AUTO-PROCESS] Successfully processed withdrawal ${withdrawal.id}`, jsonBody);
               processedResults.push({
                 id: withdrawal.id,
                 success: jsonBody?.success ?? true,
@@ -48,7 +63,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
                 detail: jsonBody
               });
             } else {
-              console.error(`[auto-process] process API failed for ${withdrawal.id}:`, processRes.status, text);
+              console.error(`[AUTO-PROCESS] Process API failed for ${withdrawal.id}:`, processRes.status, text);
               processedResults.push({
                 id: withdrawal.id,
                 success: false,
@@ -57,7 +72,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
               });
             }
           } catch (fetchErr) {
-            console.error(`[auto-process] fetch to /api/withdrawals/process failed for ${withdrawal.id}:`, fetchErr);
+            console.error(`[AUTO-PROCESS] Fetch to /api/withdrawals/process failed for ${withdrawal.id}:`, fetchErr);
             // Возвращаем статус обратно к pending в случае ошибки
             await client.query(
               'UPDATE withdrawals SET status = $1, error_message = $2 WHERE id = $3',
@@ -71,7 +86,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
           }
 
         } catch (error) {
-          console.error(`Failed to process withdrawal ${withdrawal.id}:`, error);
+          console.error(`[AUTO-PROCESS] Failed to process withdrawal ${withdrawal.id}:`, error);
           
           // Возвращаем статус обратно к pending в случае ошибки
           await client.query(
@@ -87,6 +102,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
         }
       }
 
+      console.log(`[AUTO-PROCESS] Completed processing ${pendingWithdrawals.length} withdrawals, results:`, processedResults);
       return json({
         success: true,
         processed_count: pendingWithdrawals.length,
