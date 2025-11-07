@@ -35,12 +35,26 @@ async function sendTon(client, sender, to, amountTon, comment) {
   return { seqno };
 }
 
-async function waitSeqno(client, wallet, startSeqno, timeoutMs = 60000) {
+async function waitSeqno(client, wallet, startSeqno, timeoutMs = 60000, retries = 2) {
   const start = Date.now();
+  let attempt = 0;
+  let iteration = 0;
+  // Базовая стратегия: плавное увеличение интервала (backoff) до 5-6 секунд
   while (Date.now() - start < timeoutMs) {
-    const current = await wallet.getSeqno();
-    if (current > startSeqno) return true;
-    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const current = await wallet.getSeqno();
+      if (current > startSeqno) return true;
+    } catch (err) {
+      attempt++;
+      console.warn(`[waitSeqno] Error checking seqno (attempt ${attempt}/${retries}):`, err instanceof Error ? err.message : String(err));
+      if (attempt >= retries) {
+        throw err; // После исчерпания попыток выбрасываем ошибку
+      }
+    }
+    iteration++;
+    // Интервал растёт: первые 2 попытки 3s, потом 4s, затем 5s
+    const delay = iteration < 3 ? 3000 : iteration < 6 ? 4000 : 5000;
+    await new Promise((r) => setTimeout(r, delay));
   }
   return false;
 }
