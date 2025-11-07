@@ -7,8 +7,6 @@ const ton = require(process.cwd() + '/server/ton-helper.cjs');
 
 // Получаем переменные окружения динамически
 const GAME_WALLET_ADDRESS = privateEnv.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
-// Разводим ключи по провайдерам: RPC (toncenter) и индексер (tonapi)
-const TONCENTER_API_KEY = privateEnv.TONCENTER_API_KEY || '';
 const TONAPI_KEY = privateEnv.TON_API_KEY || '';
 
 export const POST = async ({ request }) => {
@@ -56,10 +54,9 @@ export const POST = async ({ request }) => {
         ['processing', withdrawal.id]
       );
       await client.query('COMMIT');
-  const network = privateEnv.TON_NETWORK || 'mainnet';
-  // Для RPC используем только ключ toncenter, никакие другие значения не подставляем
-  const rpcApiKey = TONCENTER_API_KEY || undefined;
-  const endpoint = privateEnv.TONCENTER_ENDPOINT;
+      const network = privateEnv.TON_NETWORK || 'mainnet';
+      const rpcApiKey = privateEnv.TONCENTER_API_KEY || undefined; // Используем только toncenter ключ для RPC
+      const endpoint = privateEnv.TONCENTER_ENDPOINT;
       const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
       let transactionSuccess = false;
       let txHashOrRef = `mock_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -107,55 +104,74 @@ export const POST = async ({ request }) => {
             amount_net: amountNet,
             fee: withdrawal.fee
           });
-          // Отправляем к получателю net_amount (после удержания комиссии)
+          // Создаём запись в ton_transactions (статус PENDING, hash позже)
+          const txInsert = await client.query(
+            `INSERT INTO ton_transactions (transaction_hash, transaction_type, amount, from_address, to_address, status, seqno)
+             VALUES ($1,$2,$3,$4,$5,'PENDING',$6) RETURNING id`,
+            [
+              null,
+              'WITHDRAWAL',
+              amountNet,
+              senderAddr,
+              normalizedAddress,
+              beforeSeqno
+            ]
+          );
+          const tonTxId = txInsert.rows[0].id;
+          await client.query('UPDATE withdrawals SET blockchain_transaction_id = $1 WHERE id = $2', [tonTxId, withdrawal.id]);
+          // Отправляем net_amount
           await ton.sendTon(tonClient, sender, normalizedAddress, amountNet, `Withdrawal ${withdrawal.id}`);
           const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
           if (!confirmed) {
             throw new Error('Seqno confirmation timeout');
           }
-          // Опционально пытаемся получить hash транзакции через tonapi, ТОЛЬКО если задан TON_API_KEY.
-          // Это убирает лишние запросы к индексеру и снижает риск 429 при отсутствии ключа.
           let realTxHash = null;
-          if (TONAPI_KEY && GAME_WALLET_ADDRESS) {
-            try {
-              const txApiUrl = `https://tonapi.io/v2/blockchain/accounts/${GAME_WALLET_ADDRESS}/transactions?limit=10`;
-              const txApiRes = await fetch(txApiUrl, {
-                headers: {
-                  'Authorization': `Bearer ${TONAPI_KEY}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              if (txApiRes.ok) {
-                const txApiData = await txApiRes.json();
-                if (txApiData.transactions) {
-                  for (const tx of txApiData.transactions) {
-                    if (tx.out_msgs && tx.out_msgs.length > 0) {
-                      for (const out of tx.out_msgs) {
-                        if (
-                          out.destination === withdrawal.wallet_address &&
-                          Math.abs(parseFloat(out.value) / 1e9 - amountNet) < 0.01
-                        ) {
-                          realTxHash = tx.hash;
-                          break;
-                        }
+          try {
+            const txApiUrl = `https://tonapi.io/v2/blockchain/accounts/${GAME_WALLET_ADDRESS}/transactions?limit=10`;
+            const txApiRes = await fetch(txApiUrl, {
+              headers: {
+                'Authorization': `Bearer ${TONAPI_KEY}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (txApiRes.ok) {
+              const txApiData = await txApiRes.json();
+              if (txApiData.transactions) {
+                for (const tx of txApiData.transactions) {
+                  if (tx.out_msgs && tx.out_msgs.length > 0) {
+                    for (const out of tx.out_msgs) {
+                      if (
+                        out.destination === withdrawal.wallet_address &&
+                        Math.abs(parseFloat(out.value) / 1e9 - amountNet) < 0.01
+                      ) {
+                        realTxHash = tx.hash;
+                        break;
                       }
                     }
-                    if (realTxHash) break;
                   }
+                  if (realTxHash) break;
                 }
-              } else if (txApiRes.status === 429) {
-                console.warn('[tonapi] Rate limited (429) while fetching transactions');
               }
-            } catch (txApiErr) {
-              console.warn('Could not fetch outgoing tx hash (tonapi):', txApiErr);
             }
+          } catch (txApiErr) {
+            console.warn('Could not fetch outgoing tx hash:', txApiErr);
           }
           txHashOrRef = realTxHash || `seqno_${beforeSeqno}_w${withdrawal.id}`;
+          // Обновляем запись транзакции
+          await client.query(
+            `UPDATE ton_transactions SET transaction_hash = $1, status = $2, confirmed_at = CASE WHEN $3 IS NOT NULL THEN NOW() ELSE NULL END WHERE id = $4`,
+            [txHashOrRef, realTxHash ? 'CONFIRMED' : 'PENDING', realTxHash, tonTxId]
+          );
           transactionSuccess = true;
         }
       } catch (txErr) {
         console.error('TON send error:', txErr);
         transactionSuccess = false;
+        try {
+          if (typeof tonTxId !== 'undefined') {
+            await client.query('UPDATE ton_transactions SET status = $1 WHERE id = $2', ['FAILED', tonTxId]);
+          }
+        } catch {}
       }
       
       // Начинаем новую транзакцию для обновления статуса
