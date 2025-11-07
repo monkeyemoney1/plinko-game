@@ -16,7 +16,7 @@ export const GET: RequestHandler = async ({ request }) => {
 
     const client = await pool.connect();
     try {
-      // Находим заявки в processing дольше 5 минут
+      // Находим заявки в processing без completed_at
       const result = await client.query(`
         SELECT 
           w.id, 
@@ -31,7 +31,6 @@ export const GET: RequestHandler = async ({ request }) => {
         FROM withdrawals w
         WHERE w.status = 'processing' 
           AND w.completed_at IS NULL
-          AND w.created_at < NOW() - INTERVAL '5 minutes'
         ORDER BY w.created_at ASC
       `);
 
