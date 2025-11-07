@@ -4,7 +4,7 @@ import { pool } from '$lib/server/db';
 import { WITHDRAWAL_CONFIG } from '$lib/config/withdrawals';
 
 // POST - автоматическая обработка очереди выплат
-export const POST: RequestHandler = async () => {
+export const POST: RequestHandler = async ({ request, fetch }) => {
   try {
     const client = await pool.connect();
     
@@ -30,7 +30,8 @@ export const POST: RequestHandler = async () => {
           );
 
           // Вызываем процессинг
-          const processRes = await fetch('/api/withdrawals/process', {
+          const origin = new URL(request.url).origin;
+          const processRes = await fetch(`${origin}/api/withdrawals/process`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ withdrawal_id: withdrawal.id })
@@ -54,7 +55,7 @@ export const POST: RequestHandler = async () => {
         } catch (error) {
           console.error(`Failed to process withdrawal ${withdrawal.id}:`, error);
           
-          // Возвращаем статус обратно к pending в случае ошибки
+          // Возвращаем статус обратно к pending в случае ошибки (сохранена логика резерва средств)
           await client.query(
             'UPDATE withdrawals SET status = $1, error_message = $2 WHERE id = $3',
             [WITHDRAWAL_CONFIG.STATUSES.PENDING, 'Auto-process failed', withdrawal.id]
