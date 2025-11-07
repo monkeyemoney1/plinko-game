@@ -29,33 +29,51 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
             [WITHDRAWAL_CONFIG.STATUSES.PROCESSING, withdrawal.id]
           );
 
-          // Вызываем процессинг
-          const origin = new URL(request.url).origin;
-          const processRes = await fetch(`${origin}/api/withdrawals/process`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ withdrawal_id: withdrawal.id })
-          });
-
-          if (processRes.ok) {
-            const processData = await processRes.json();
-            processedResults.push({
-              id: withdrawal.id,
-              success: processData.success,
-              message: processData.message || 'Processed successfully'
+          // Вызываем процессинг через абсолютный origin, чтобы гарантированно попасть на серверный маршрут
+          try {
+            const origin = new URL(request.url).origin;
+            const processRes = await fetch(`${origin}/api/withdrawals/process`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ withdrawal_id: withdrawal.id })
             });
-          } else {
+            const text = await processRes.text();
+            let jsonBody = null;
+            try { jsonBody = JSON.parse(text); } catch {}
+            if (processRes.ok) {
+              processedResults.push({
+                id: withdrawal.id,
+                success: jsonBody?.success ?? true,
+                message: jsonBody?.message || 'Processed successfully',
+                detail: jsonBody
+              });
+            } else {
+              console.error(`[auto-process] process API failed for ${withdrawal.id}:`, processRes.status, text);
+              processedResults.push({
+                id: withdrawal.id,
+                success: false,
+                message: jsonBody?.error || `Process API call failed with status ${processRes.status}`,
+                detail: jsonBody
+              });
+            }
+          } catch (fetchErr) {
+            console.error(`[auto-process] fetch to /api/withdrawals/process failed for ${withdrawal.id}:`, fetchErr);
+            // Возвращаем статус обратно к pending в случае ошибки
+            await client.query(
+              'UPDATE withdrawals SET status = $1, error_message = $2 WHERE id = $3',
+              [WITHDRAWAL_CONFIG.STATUSES.PENDING, 'Auto-process fetch failed', withdrawal.id]
+            );
             processedResults.push({
               id: withdrawal.id,
               success: false,
-              message: 'Process API call failed'
+              message: fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
             });
           }
 
         } catch (error) {
           console.error(`Failed to process withdrawal ${withdrawal.id}:`, error);
           
-          // Возвращаем статус обратно к pending в случае ошибки (сохранена логика резерва средств)
+          // Возвращаем статус обратно к pending в случае ошибки
           await client.query(
             'UPDATE withdrawals SET status = $1, error_message = $2 WHERE id = $3',
             [WITHDRAWAL_CONFIG.STATUSES.PENDING, 'Auto-process failed', withdrawal.id]
