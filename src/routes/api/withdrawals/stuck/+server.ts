@@ -5,17 +5,23 @@ import { env as privateEnv } from '$env/dynamic/private';
 
 // GET - получить застрявшие заявки в processing
 export const GET: RequestHandler = async ({ request }) => {
+  console.log('[STUCK] GET request received');
   try {
     // Простая проверка admin пароля (опционально)
     const adminPassword = request.headers.get('X-Admin-Password');
     const expectedPassword = privateEnv.ADMIN_PASSWORD || '2282211q';
     
+    console.log('[STUCK] Admin password check:', adminPassword ? 'provided' : 'missing');
+    
     if (adminPassword !== expectedPassword) {
+      console.log('[STUCK] Unauthorized access attempt');
       return json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
+    console.log('[STUCK] Connecting to database...');
     const client = await pool.connect();
     try {
+      console.log('[STUCK] Querying stuck withdrawals...');
       // Находим заявки в processing без completed_at
       const result = await client.query(`
         SELECT 
@@ -34,6 +40,8 @@ export const GET: RequestHandler = async ({ request }) => {
         ORDER BY w.created_at ASC
       `);
 
+      console.log(`[STUCK] Found ${result.rows.length} stuck withdrawals`);
+      
       return json({
         success: true,
         stuck_withdrawals: result.rows,
@@ -41,12 +49,16 @@ export const GET: RequestHandler = async ({ request }) => {
         total_amount: result.rows.reduce((sum, w) => sum + parseFloat(w.amount), 0)
       });
 
+    } catch (dbError) {
+      console.error('[STUCK] Database error:', dbError);
+      throw dbError;
     } finally {
       client.release();
+      console.log('[STUCK] Database connection released');
     }
 
   } catch (error) {
-    console.error('Get stuck withdrawals error:', error);
+    console.error('[STUCK] Get stuck withdrawals error:', error);
     return json({ 
       success: false, 
       error: 'Internal server error' 
