@@ -99,12 +99,16 @@ export const POST = async ({ request }) => {
           }
           // Логируем адреса отправителя и получателя (user-friendly mainnet)
           const senderAddr = sender.contract.address.toString({ bounceable: false, testOnly: false, urlSafe: true });
+          const amountNet = parseFloat(withdrawal.net_amount ?? withdrawal.amount);
           console.log('[TON WITHDRAW]', {
             from: senderAddr,
             to: normalizedAddress,
-            amount: withdrawal.amount
+            amount_gross: withdrawal.amount,
+            amount_net: amountNet,
+            fee: withdrawal.fee
           });
-          await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+          // Отправляем к получателю net_amount (после удержания комиссии)
+          await ton.sendTon(tonClient, sender, normalizedAddress, amountNet, `Withdrawal ${withdrawal.id}`);
           const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
           if (!confirmed) {
             throw new Error('Seqno confirmation timeout');
@@ -129,7 +133,7 @@ export const POST = async ({ request }) => {
                       for (const out of tx.out_msgs) {
                         if (
                           out.destination === withdrawal.wallet_address &&
-                          Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
+                          Math.abs(parseFloat(out.value) / 1e9 - amountNet) < 0.01
                         ) {
                           realTxHash = tx.hash;
                           break;
