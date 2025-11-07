@@ -166,10 +166,13 @@
     margin: 0 auto;
     padding: 20px;
     font-family: 'Courier New', monospace;
+    background: #ffffff;
+    min-height: 100vh;
   }
   
   h1 {
     margin-bottom: 20px;
+    color: #333;
   }
   
   .controls {
@@ -199,6 +202,8 @@
     border: 1px solid #ccc;
     border-radius: 4px;
     font-family: inherit;
+    background: white;
+    color: #333;
   }
   
   input[type="password"] {
@@ -218,6 +223,7 @@
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    font-weight: 600;
   }
   
   button:hover:not(:disabled) {
@@ -243,6 +249,7 @@
     padding: 12px;
     border-radius: 4px;
     margin-bottom: 20px;
+    font-weight: 600;
   }
   
   .stats {
@@ -250,10 +257,11 @@
     gap: 20px;
     margin-bottom: 15px;
     font-weight: bold;
+    color: #333;
   }
   
   .stats .info { color: #007bff; }
-  .stats .warn { color: #ffc107; }
+  .stats .warn { color: #ff8800; }
   .stats .error-stat { color: #dc3545; }
   
   .logs {
@@ -283,11 +291,15 @@
   }
   
   .log-entry.error {
-    background: rgba(220, 53, 69, 0.1);
+    background: rgba(220, 53, 69, 0.15);
+    padding: 6px 8px;
+    border-radius: 3px;
   }
   
   .log-entry.warn {
-    background: rgba(255, 193, 7, 0.1);
+    background: rgba(255, 193, 7, 0.15);
+    padding: 6px 8px;
+    border-radius: 3px;
   }
   
   .timestamp {
@@ -307,6 +319,7 @@
   .message {
     white-space: pre-wrap;
     word-break: break-word;
+    color: #d4d4d4;
   }
   
   label {
@@ -314,5 +327,7 @@
     align-items: center;
     gap: 5px;
     cursor: pointer;
+    color: #333;
+    font-weight: 500;
   }
 </style>
