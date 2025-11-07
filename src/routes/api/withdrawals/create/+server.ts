@@ -18,7 +18,7 @@ const ton = require(process.cwd() + '/server/ton-helper.cjs');
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { user_id, amount, wallet_address } = await request.json();
+  const { user_id, amount, wallet_address } = await request.json();
 
     // Валидация входных данных
     if (!user_id || !amount || !wallet_address) {
@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request }) => {
       }, { status: 400 });
     }
 
-    const withdrawAmount = parseFloat(amount);
+  const withdrawAmount = parseFloat(amount);
     if (withdrawAmount <= 0) {
       return json({ 
         success: false, 
@@ -62,107 +62,116 @@ export const POST: RequestHandler = async ({ request }) => {
       // Проверка возраста аккаунта отключена (MIN_ACCOUNT_AGE_HOURS = 0)
 
       // Получаем статистику выводов за сегодня
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const dailyStatsResult = await client.query(
-        `SELECT 
-          COALESCE(SUM(amount), 0) as daily_amount,
-          COUNT(*) as daily_count
-         FROM withdrawals 
-         WHERE user_id = $1 
-         AND created_at >= $2 
-         AND status NOT IN ('failed', 'cancelled')`,
-        [user_id, today]
-      );
-
-      const dailyStats = dailyStatsResult.rows[0];
-      const dailyWithdrawn = parseFloat(dailyStats.daily_amount);
-      const dailyCount = parseInt(dailyStats.daily_count);
-
-      // Проверяем лимиты
-      const limitCheck = validateWithdrawalLimits(withdrawAmount, dailyWithdrawn, dailyCount);
-      if (!limitCheck.valid) {
-        await client.query('ROLLBACK');
-        return json({ 
-          success: false, 
-          error: limitCheck.error 
-        }, { status: 400 });
-      }
-
-      // Вычисляем комиссию
-      const feeInfo = calculateWithdrawalFee(withdrawAmount);
-      
-      // Проверяем достаточность баланса с учетом комиссии
-      if (currentBalance < feeInfo.grossAmount) {
-        await client.query('ROLLBACK');
-        return json({ 
-          success: false, 
-          error: `Недостаточно средств. Требуется: ${feeInfo.grossAmount} TON (включая комиссию ${feeInfo.fee} TON), доступно: ${currentBalance} TON` 
-        }, { status: 400 });
-      }
-
-      // Определяем статус вывода
-      let status: string = WITHDRAWAL_CONFIG.STATUSES.PENDING;
-      if (requiresManualReview(withdrawAmount)) {
-        status = WITHDRAWAL_CONFIG.STATUSES.MANUAL_REVIEW;
-      }
-
-      // Создаем запись о выводе
-      const withdrawalResult = await client.query(
-        `INSERT INTO withdrawals (
-          user_id, amount, wallet_address, status, fee, net_amount, 
-          auto_process, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
-        RETURNING id, created_at`,
-        [
-          user_id, 
-          feeInfo.grossAmount, 
-          wallet_address, 
-          status,
-          feeInfo.fee,
-          feeInfo.netAmount,
-          shouldAutoProcess(withdrawAmount)
-        ]
-      );
-
-      const withdrawalId = withdrawalResult.rows[0].id;
-
-      // Резервируем средства (уменьшаем баланс)
-      await client.query(
-        'UPDATE users SET ton_balance = ton_balance - $1 WHERE id = $2',
-        [feeInfo.grossAmount, user_id]
-      );
-
-      await client.query('COMMIT');
-
-      console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${feeInfo.grossAmount} TON (net: ${feeInfo.netAmount}, fee: ${feeInfo.fee})`);
-
-      // НЕ отправляем транзакцию в этом запросе синхронно, чтобы избежать таймаутов и 429.
-      // Ставим заявку в очередь и триггерим фоновую обработку через auto-process.
-      ;(async () => {
-        try {
-          const origin = new URL(request.url).origin;
-          await fetch(`${origin}/api/withdrawals/auto-process`, { method: 'POST' });
-        } catch (e) {
-          console.warn(`[Withdrawal ${withdrawalId}] Failed to trigger auto-process:`, e);
+          }
         }
-      })();
 
-      return json({
-        success: true,
-        withdrawal: {
-          id: withdrawalId,
-          user_id,
-          gross_amount: feeInfo.grossAmount,
-          net_amount: feeInfo.netAmount,
-          fee: feeInfo.fee,
-          wallet_address,
-          status: status,
-          created_at: withdrawalResult.rows[0].created_at
-        },
-        message: 'Заявка на вывод создана и поставлена в очередь. Обработка начнется автоматически.'
-      });
+        // Проверим баланс кошелька (не блокируем, только информируем)
+        try {
+          const mod = await import('@ton/ton');
+          const balance = await sender.contract.getBalance();
+          const balTon = parseFloat(mod.fromNano(balance));
+          console.log(`[Withdrawal ${withdrawalId}] Game wallet balance: ${balTon} TON`);
+          
+          if (balTon < feeInfo.netAmount + 0.1) {
+            console.warn(`[Withdrawal ${withdrawalId}] Warning: Low wallet balance. Required: ${feeInfo.netAmount}, Available: ${balTon}`);
+          }
+        } catch (balanceError) {
+          console.warn(`[Withdrawal ${withdrawalId}] Could not check wallet balance:`, balanceError instanceof Error ? balanceError.message : String(balanceError));
+        }
+
+        const beforeSeqno = await sender.contract.getSeqno();
+        console.log(`[Withdrawal ${withdrawalId}] Current wallet seqno: ${beforeSeqno}, sending ${feeInfo.netAmount} TON to ${wallet_address}`);
+        
+        await ton.sendTon(tonClient, sender, wallet_address, feeInfo.netAmount, `Withdrawal ${withdrawalId}`);
+        console.log(`[Withdrawal ${withdrawalId}] Transaction sent, waiting for confirmation...`);
+        
+        const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+        console.log(`[Withdrawal ${withdrawalId}] Transaction confirmed: ${confirmed}`);
+
+        await client.query('BEGIN');
+        
+        if (confirmed) {
+          // Успешная отправка - обновляем статус на "завершено"
+          await client.query(
+            `UPDATE withdrawals 
+             SET status = $1, 
+                 transaction_hash = $2, 
+                 completed_at = NOW() 
+             WHERE id = $3`,
+            [WITHDRAWAL_CONFIG.STATUSES.COMPLETED, `seqno_${beforeSeqno}_w${withdrawalId}`, withdrawalId]
+          );
+          
+          await client.query('COMMIT');
+          
+          console.log(`[Withdrawal ${withdrawalId}] Successfully completed!`);
+          
+          return json({
+            success: true,
+            withdrawal: {
+              id: withdrawalId,
+              user_id,
+              gross_amount: feeInfo.grossAmount,
+              net_amount: feeInfo.netAmount,
+              fee: feeInfo.fee,
+              wallet_address,
+              status: WITHDRAWAL_CONFIG.STATUSES.COMPLETED,
+              transaction_hash: `seqno_${beforeSeqno}_w${withdrawalId}`,
+              created_at: withdrawalResult.rows[0].created_at
+            },
+            message: `Средства успешно отправлены! Сумма: ${feeInfo.netAmount} TON`
+          });
+          
+        } else {
+          // Ошибка отправки - обновляем статус на "ошибка" и возвращаем средства
+          await client.query(
+            `UPDATE withdrawals 
+             SET status = $1, 
+                 error_message = $2 
+             WHERE id = $3`,
+            [WITHDRAWAL_CONFIG.STATUSES.FAILED, 'Transaction not confirmed in time', withdrawalId]
+          );
+          
+          // Возвращаем средства на баланс пользователя
+          await client.query(
+            'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
+            [feeInfo.grossAmount, user_id]
+          );
+          
+          await client.query('COMMIT');
+          
+          console.error(`[Withdrawal ${withdrawalId}] Failed: not confirmed`);
+          
+          return json({
+            success: false,
+            error: 'Ошибка отправки средств: не подтверждена транзакция. Средства возвращены на баланс.'
+          }, { status: 500 });
+        }
+        
+      } catch (processError) {
+        await client.query('ROLLBACK');
+        
+        // При ошибке обработки возвращаем средства
+        await client.query('BEGIN');
+        await client.query(
+          `UPDATE withdrawals 
+           SET status = $1, 
+               error_message = $2 
+           WHERE id = $3`,
+          [WITHDRAWAL_CONFIG.STATUSES.FAILED, String(processError), withdrawalId]
+        );
+        await client.query(
+          'UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2',
+          [feeInfo.grossAmount, user_id]
+        );
+        await client.query('COMMIT');
+        
+        console.error(`[Withdrawal ${withdrawalId}] Processing error:`, processError);
+        
+        return json({
+          success: false,
+          error: `Ошибка обработки вывода: ${processError instanceof Error ? processError.message : String(processError)}. Средства возвращены на баланс.`
+        }, { status: 500 });
+      }
 
     } catch (dbError) {
       await client.query('ROLLBACK');

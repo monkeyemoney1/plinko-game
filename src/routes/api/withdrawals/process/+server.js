@@ -153,6 +153,39 @@ export const POST = async ({ request }) => {
                 }
               }
             }
+            if (!realTxHash) {
+              console.log('[TON WITHDRAW] TonAPI hash not found, trying toncenter fallback');
+              const tcEndpoint = 'https://toncenter.com/api/v2/getTransactions';
+              const params = new URLSearchParams({ address: GAME_WALLET_ADDRESS, limit: '10' });
+              const tcRes = await fetch(`${tcEndpoint}?${params.toString()}`, {
+                headers: privateEnv.TONCENTER_API_KEY ? { 'X-API-Key': privateEnv.TONCENTER_API_KEY } : {}
+              });
+              if (tcRes.ok) {
+                const tcData = await tcRes.json();
+                if (tcData.result) {
+                  for (const tx of tcData.result) {
+                    if (tx.out_msgs && tx.out_msgs.length > 0) {
+                      for (const out of tx.out_msgs) {
+                        try {
+                          const valueNano = parseFloat(out.value);
+                          const valueTon = valueNano / 1e9;
+                          if (
+                            out.destination === withdrawal.wallet_address &&
+                            Math.abs(valueTon - amountNet) < 0.01
+                          ) {
+                            realTxHash = tx.hash || tx.transaction_id?.hash;
+                            break;
+                          }
+                        } catch {}
+                      }
+                    }
+                    if (realTxHash) break;
+                  }
+                }
+              } else {
+                console.warn('[TON WITHDRAW] toncenter fallback failed:', tcRes.status);
+              }
+            }
           } catch (txApiErr) {
             console.warn('Could not fetch outgoing tx hash:', txApiErr);
           }
