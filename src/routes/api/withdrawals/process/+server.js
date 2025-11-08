@@ -43,9 +43,11 @@ export const POST = async ({ request }) => {
       await client.query('UPDATE withdrawals SET status = $1 WHERE id = $2', ['processing', withdrawal.id]);
       await client.query('COMMIT');
       console.log(`[PROCESS] Start withdrawal id=${withdrawal.id} amount=${withdrawal.amount}`);
-      const network = privateEnv.TON_NETWORK || 'mainnet';
-      const apiKey = privateEnv.TONCENTER_API_KEY || privateEnv.TONAPI_KEY || TONAPI_KEY;
-      const endpoint = privateEnv.TONCENTER_ENDPOINT;
+  const network = privateEnv.TON_NETWORK || 'mainnet';
+  const toncenterApiKey = privateEnv.TONCENTER_API_KEY;
+  const tonapiKey = privateEnv.TONAPI_KEY || TONAPI_KEY;
+  const endpoint = privateEnv.TONCENTER_ENDPOINT;
+  const tonapiBase = privateEnv.TONAPI_BASE_URL || 'https://tonapi.io';
       const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
       let transactionSuccess = false;
       let txHashOrRef = `mock_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -60,7 +62,7 @@ export const POST = async ({ request }) => {
           await client.query('ROLLBACK');
           return json({ success: false, error: 'Real TON withdrawals are not configured. Contact support.' }, { status: 503 });
         } else {
-          const tonClient = ton.createTonClient({ network, apiKey, endpoint });
+          const tonClient = ton.createTonClient({ network, apiKey: toncenterApiKey, endpoint });
           const sender = await ton.openGameWallet(tonClient, mnemonic);
           // Логируем адрес, вычисленный из сид-фразы (user-friendly mainnet)
           try {
@@ -88,47 +90,122 @@ export const POST = async ({ request }) => {
           // Логируем адреса отправителя и получателя (user-friendly mainnet)
           const senderAddr = sender.contract.address.toString({ bounceable: false, testOnly: false, urlSafe: true });
           console.log(`[PROCESS] Sending amount=${withdrawal.amount} from=${senderAddr} to=${normalizedAddress}`);
-          await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
-          console.log(`[PROCESS] Sent. Waiting confirmation...`);
-          const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
-          console.log(`[PROCESS] Confirmation result=${confirmed}`);
-          if (!confirmed) {
-            throw new Error('Seqno confirmation timeout');
-          }
-          let realTxHash = null;
-          try {
-            const txApiUrl = `https://tonapi.io/v2/blockchain/accounts/${GAME_WALLET_ADDRESS}/transactions?limit=10`;
-            const txApiRes = await fetch(txApiUrl, {
-              headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
+          // Попытка отправки через TonAPI (opentonapi)
+          if (tonapiKey) {
+            console.log('[PROCESS] Using TonAPI broadcast');
+            try {
+              const { bocBase64 } = await ton.createTransferBoc(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+              const sendRes = await fetch(`${tonapiBase}/v2/blockchain/message`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${tonapiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ boc: bocBase64 })
+              });
+              console.log(`[PROCESS] TonAPI broadcast status=${sendRes.status}`);
+              if (!sendRes.ok) {
+                throw new Error(`TonAPI broadcast failed: ${sendRes.status}`);
               }
-            });
-            if (txApiRes.ok) {
-              const txApiData = await txApiRes.json();
-              if (txApiData.transactions) {
-                for (const tx of txApiData.transactions) {
-                  if (tx.out_msgs && tx.out_msgs.length > 0) {
-                    for (const out of tx.out_msgs) {
-                      if (
-                        out.destination === withdrawal.wallet_address &&
-                        Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
-                      ) {
-                        realTxHash = tx.hash;
-                        break;
+              // Ожидаем подтверждение, опрашивая TonAPI транзакции исходящего кошелька
+              let realTxHash = null;
+              const started = Date.now();
+              while (Date.now() - started < 60000 && !realTxHash) {
+                try {
+                  const txApiUrl = `${tonapiBase}/v2/blockchain/accounts/${GAME_WALLET_ADDRESS}/transactions?limit=10`;
+                  const txApiRes = await fetch(txApiUrl, {
+                    headers: {
+                      'Authorization': `Bearer ${tonapiKey}`,
+                      'Content-Type': 'application/json'
+                    }
+                  });
+                  if (txApiRes.ok) {
+                    const txApiData = await txApiRes.json();
+                    if (txApiData.transactions) {
+                      for (const tx of txApiData.transactions) {
+                        if (tx.out_msgs && tx.out_msgs.length > 0) {
+                          for (const out of tx.out_msgs) {
+                            if (
+                              out.destination === normalizedAddress &&
+                              Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
+                            ) {
+                              realTxHash = tx.hash;
+                              break;
+                            }
+                          }
+                        }
+                        if (realTxHash) break;
                       }
                     }
                   }
-                  if (realTxHash) break;
+                } catch (pollErr) {
+                  console.warn('[PROCESS] TonAPI poll error:', pollErr);
+                }
+                if (!realTxHash) {
+                  await new Promise(r => setTimeout(r, 3500));
                 }
               }
-              console.log(`[PROCESS] Tx hash lookup status=${txApiRes.status} found=${!!realTxHash}`);
+              txHashOrRef = realTxHash || `boc_w${withdrawal.id}`;
+              transactionSuccess = true;
+            } catch (e) {
+              console.warn('[PROCESS] TonAPI broadcast failed, fallback to RPC send:', e);
+              // Фолбэк на прямую отправку через RPC
+              await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+              console.log(`[PROCESS] Sent via RPC. Waiting confirmation...`);
+              const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+              console.log(`[PROCESS] Confirmation result=${confirmed}`);
+              if (!confirmed) {
+                throw new Error('Seqno confirmation timeout');
+              }
+              transactionSuccess = true;
             }
-          } catch (txApiErr) {
-            console.warn('[PROCESS] Could not fetch outgoing tx hash:', txApiErr);
+          } else {
+            // Нет TONAPI ключа — отправляем через RPC как раньше
+            await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+            console.log(`[PROCESS] Sent via RPC. Waiting confirmation...`);
+            const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
+            console.log(`[PROCESS] Confirmation result=${confirmed}`);
+            if (!confirmed) {
+              throw new Error('Seqno confirmation timeout');
+            }
+            transactionSuccess = true;
           }
-          txHashOrRef = realTxHash || `seqno_${beforeSeqno}_w${withdrawal.id}`;
-          transactionSuccess = true;
+          // Попытка найти хэш транзакции через TonAPI (если есть ключ)
+          let realTxHash = null;
+          if (tonapiKey) {
+            try {
+              const txApiUrl = `${tonapiBase}/v2/blockchain/accounts/${GAME_WALLET_ADDRESS}/transactions?limit=10`;
+              const txApiRes = await fetch(txApiUrl, {
+                headers: {
+                  'Authorization': `Bearer ${tonapiKey}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              if (txApiRes.ok) {
+                const txApiData = await txApiRes.json();
+                if (txApiData.transactions) {
+                  for (const tx of txApiData.transactions) {
+                    if (tx.out_msgs && tx.out_msgs.length > 0) {
+                      for (const out of tx.out_msgs) {
+                        if (
+                          out.destination === normalizedAddress &&
+                          Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
+                        ) {
+                          realTxHash = tx.hash;
+                          break;
+                        }
+                      }
+                    }
+                    if (realTxHash) break;
+                  }
+                }
+                console.log(`[PROCESS] Tx hash lookup via TonAPI status=${txApiRes.status} found=${!!realTxHash}`);
+              }
+            } catch (txApiErr) {
+              console.warn('[PROCESS] Could not fetch outgoing tx hash via TonAPI:', txApiErr);
+            }
+          }
+          txHashOrRef = realTxHash || txHashOrRef || `seqno_${beforeSeqno}_w${withdrawal.id}`;
         }
       } catch (txErr) {
         console.error('[PROCESS] TON send error:', txErr);
