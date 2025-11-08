@@ -16,9 +16,10 @@ export const POST = async ({ request }) => {
   try {
     const { withdrawal_id } = await request.json();
     if (!withdrawal_id) {
-      add('error', '[PROCESS] Missing withdrawal_id');
+      add('error', '[PROCESS] Missing withdrawal_id in request body');
       return json({ success: false, error: 'Missing withdrawal_id' }, { status: 400 });
     }
+    add('info', `[PROCESS] Processing withdrawal_id=${withdrawal_id}`);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -31,10 +32,12 @@ export const POST = async ({ request }) => {
       
       if (withdrawalResult.rows.length === 0) {
         await client.query('ROLLBACK');
+        add('error', `[PROCESS] Withdrawal not found: id=${withdrawal_id}`);
         return json({ success: false, error: 'Withdrawal not found or already processed' }, { status: 404 });
       }
       
       const withdrawal = withdrawalResult.rows[0];
+      add('info', `[PROCESS] Found withdrawal: id=${withdrawal.id} status=${withdrawal.status} amount=${withdrawal.amount}`);
       
       // Проверяем идемпотентность - если уже completed, просто возвращаем успех
       if (withdrawal.status === 'completed') {
@@ -54,6 +57,7 @@ export const POST = async ({ request }) => {
   const endpoint = privateEnv.TONCENTER_ENDPOINT;
   const tonapiBase = privateEnv.TONAPI_BASE_URL || 'https://tonapi.io';
       const mnemonic = privateEnv.GAME_WALLET_MNEMONIC;
+      add('info', `[PROCESS] Environment check - network=${network} hasApiKey=${!!toncenterApiKey} hasTonApiKey=${!!tonapiKey} hasMnemonic=${!!mnemonic}`);
       let transactionSuccess = false;
       let txHashOrRef = `mock_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
       try {
@@ -92,6 +96,7 @@ export const POST = async ({ request }) => {
             normalizedAddress = Address.parse(normalizedAddress).toString({ bounceable: false, testOnly: false, urlSafe: true });
           } catch (e) {
             console.warn('[PROCESS] Address normalization failed:', e);
+            add('error', `[PROCESS] Address normalization failed: ${e.message}`);
             return json({ success: false, error: 'Invalid TON address format' }, { status: 400 });
           }
           // Логируем адреса отправителя и получателя (user-friendly mainnet)
@@ -267,6 +272,7 @@ export const POST = async ({ request }) => {
       }
     } catch (dbError) {
       await client.query('ROLLBACK');
+      add('error', `[PROCESS] Database error: ${dbError.message}`);
       throw dbError;
     } finally {
       client.release();
