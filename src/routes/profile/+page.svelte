@@ -53,18 +53,16 @@
     if (!userId) return;
     
     try {
-      // Конвертируем адрес в user-friendly формат (UQ, 48 символов)
-      const normalizedAddress = await normalizeAddressClient(walletAddress);
-      
+      // Сохраняем адрес как есть (без нормализации) для корректной работы выводов
       await fetch('/api/wallet/track-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           user_id: parseInt(userId),
-          wallet_address: normalizedAddress
+          wallet_address: walletAddress // Сохраняем оригинальный адрес
         })
       });
-      console.log('Подключение кошелька отслежено (UQ формат):', normalizedAddress);
+      console.log('Подключение кошелька отслежено (оригинальный формат):', walletAddress);
     } catch (error) {
       console.error('Ошибка отслеживания подключения кошелька:', error);
     }
