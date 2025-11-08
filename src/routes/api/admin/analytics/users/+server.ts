@@ -37,6 +37,7 @@ export const GET: RequestHandler = async () => {
     const query = `
       SELECT 
         u.*,
+        u.ton_address as wallet_address,
         COALESCE(wallet_stats.wallet_count, 0) as wallet_count,
         COALESCE(stars_stats.transaction_count, 0) as star_transactions_count,
         COALESCE(stars_stats.total_spent, 0) as total_stars_spent,
