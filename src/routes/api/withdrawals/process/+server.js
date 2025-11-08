@@ -90,14 +90,24 @@ export const POST = async ({ request }) => {
           add('info', `[PROCESS] Current seqno=${beforeSeqno}`);
           // Нормализация TON-адреса: если raw (0:...), конвертируем в base64
           let normalizedAddress = withdrawal.wallet_address.trim().replace(/-/g, '');
+          add('info', `[PROCESS] Original address: ${withdrawal.wallet_address}`);
+          
           try {
             const { Address } = await import('@ton/ton');
             // Всегда приводим к user-friendly mainnet (UQ...)
-            normalizedAddress = Address.parse(normalizedAddress).toString({ bounceable: false, testOnly: false, urlSafe: true });
+            const parsed = Address.parse(normalizedAddress);
+            normalizedAddress = parsed.toString({ bounceable: false, testOnly: false, urlSafe: true });
+            add('info', `[PROCESS] Normalized address: ${normalizedAddress}`);
           } catch (e) {
             console.warn('[PROCESS] Address normalization failed:', e);
             add('error', `[PROCESS] Address normalization failed: ${e.message}`);
-            return json({ success: false, error: 'Invalid TON address format' }, { status: 400 });
+            
+            // Если адрес уже в правильном формате (UQ...), попробуем использовать как есть
+            if (normalizedAddress.startsWith('UQ') || normalizedAddress.startsWith('EQ')) {
+              add('warn', `[PROCESS] Using address as-is: ${normalizedAddress}`);
+            } else {
+              return json({ success: false, error: 'Invalid TON address format' }, { status: 400 });
+            }
           }
           // Логируем адреса отправителя и получателя (user-friendly mainnet)
           const senderAddr = sender.contract.address.toString({ bounceable: false, testOnly: false, urlSafe: true });

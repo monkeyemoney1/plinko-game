@@ -88,11 +88,14 @@ export const POST: RequestHandler = async ({ request }) => {
 
       // Нормализуем адрес кошелька пользователя к user-friendly формату (UQ..., non-bounceable)
       let normalizedWalletAddress = wallet_address.trim();
+      add('info', `[CREATE] Original wallet address: "${wallet_address}"`);
       try {
         const { Address } = await import('@ton/ton');
         normalizedWalletAddress = Address.parse(normalizedWalletAddress).toString({ bounceable: false, testOnly: false, urlSafe: true });
+        add('info', `[CREATE] Normalized wallet address: "${normalizedWalletAddress}"`);
       } catch (e) {
         await client.query('ROLLBACK');
+        add('error', `[CREATE] Invalid wallet address: "${wallet_address}" - ${e.message}`);
         return json({ success: false, error: 'Invalid TON wallet address' }, { status: 400 });
       }
 
