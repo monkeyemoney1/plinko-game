@@ -37,7 +37,7 @@ export const POST = async ({ request }) => {
       }
       
       const withdrawal = withdrawalResult.rows[0];
-      add('info', `[PROCESS] Found withdrawal: id=${withdrawal.id} status=${withdrawal.status} amount=${withdrawal.amount}`);
+      add('info', `[PROCESS] Found withdrawal: id=${withdrawal.id} status=${withdrawal.status} gross=${withdrawal.amount} net=${withdrawal.net_amount}`);
       
       // Проверяем идемпотентность - если уже completed, просто возвращаем успех
       if (withdrawal.status === 'completed') {
@@ -50,7 +50,7 @@ export const POST = async ({ request }) => {
       await client.query('UPDATE withdrawals SET status = $1 WHERE id = $2', ['processing', withdrawal.id]);
       await client.query('COMMIT');
       console.log(`[PROCESS] Start withdrawal id=${withdrawal.id} amount=${withdrawal.amount}`);
-      add('info', `[PROCESS] Start withdrawal id=${withdrawal.id} amount=${withdrawal.amount}`);
+      add('info', `[PROCESS] Start withdrawal id=${withdrawal.id} gross=${withdrawal.amount} net=${withdrawal.net_amount} - will send ${withdrawal.net_amount}`);
   const network = privateEnv.TON_NETWORK || 'mainnet';
   const toncenterApiKey = privateEnv.TONCENTER_API_KEY;
   const tonapiKey = privateEnv.TONAPI_KEY || TONAPI_KEY;
@@ -111,13 +111,14 @@ export const POST = async ({ request }) => {
           }
           // Логируем адреса отправителя и получателя (user-friendly mainnet)
           const senderAddr = sender.contract.address.toString({ bounceable: false, testOnly: false, urlSafe: true });
-          console.log(`[PROCESS] Sending amount=${withdrawal.amount} from=${senderAddr} to=${normalizedAddress}`);
+          console.log(`[PROCESS] Sending net_amount=${withdrawal.net_amount} from=${senderAddr} to=${normalizedAddress}`);
+          add('info', `[PROCESS] Sending net_amount=${withdrawal.net_amount} to=${normalizedAddress}`);
           // Попытка отправки через TonAPI (opentonapi)
           if (tonapiKey) {
             console.log('[PROCESS] Using TonAPI broadcast');
             add('info', '[PROCESS] Using TonAPI broadcast');
             try {
-              const { bocBase64 } = await ton.createTransferBoc(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+              const { bocBase64 } = await ton.createTransferBoc(tonClient, sender, normalizedAddress, parseFloat(withdrawal.net_amount), `Withdrawal ${withdrawal.id}`);
               const sendRes = await fetch(`${tonapiBase}/v2/blockchain/message`, {
                 method: 'POST',
                 headers: {
@@ -151,7 +152,7 @@ export const POST = async ({ request }) => {
                           for (const out of tx.out_msgs) {
                             if (
                               out.destination === normalizedAddress &&
-                              Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
+                              Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.net_amount)) < 0.01
                             ) {
                               realTxHash = tx.hash;
                               break;
@@ -176,7 +177,7 @@ export const POST = async ({ request }) => {
               console.warn('[PROCESS] TonAPI broadcast failed, fallback to RPC send:', e);
               add('warn', `[PROCESS] TonAPI broadcast failed, fallback to RPC send: ${e.message}`);
               // Фолбэк на прямую отправку через RPC
-              await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+              await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.net_amount), `Withdrawal ${withdrawal.id}`);
               console.log(`[PROCESS] Sent via RPC. Waiting confirmation...`);
               const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
               console.log(`[PROCESS] Confirmation result=${confirmed}`);
@@ -188,7 +189,7 @@ export const POST = async ({ request }) => {
             }
           } else {
             // Нет TONAPI ключа — отправляем через RPC как раньше
-            await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
+            await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.net_amount), `Withdrawal ${withdrawal.id}`);
             console.log(`[PROCESS] Sent via RPC. Waiting confirmation...`);
             const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
             console.log(`[PROCESS] Confirmation result=${confirmed}`);
@@ -216,7 +217,7 @@ export const POST = async ({ request }) => {
                       for (const out of tx.out_msgs) {
                         if (
                           out.destination === normalizedAddress &&
-                          Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.amount)) < 0.01
+                          Math.abs(parseFloat(out.value) / 1e9 - parseFloat(withdrawal.net_amount)) < 0.01
                         ) {
                           realTxHash = tx.hash;
                           break;
@@ -258,6 +259,7 @@ export const POST = async ({ request }) => {
             status: 'completed',
             transaction_hash: txHashOrRef,
             amount: withdrawal.amount,
+            net_amount: withdrawal.net_amount,
             wallet_address: withdrawal.wallet_address
           },
           message: 'Withdrawal completed successfully!'
