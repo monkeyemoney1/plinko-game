@@ -59,6 +59,7 @@ export const POST = async ({ request }) => {
       try {
         if (!mnemonic) {
           console.warn(`[PROCESS] Missing GAME_WALLET_MNEMONIC. Returning funds id=${withdrawal.id}`);
+          add('error', `[PROCESS] Missing GAME_WALLET_MNEMONIC. Returning funds id=${withdrawal.id}`);
           await client.query('UPDATE users SET ton_balance = ton_balance + $1 WHERE id = $2', [withdrawal.amount, withdrawal.user_id]);
           await client.query(
             `UPDATE withdrawals SET status = 'failed', error_message = 'Wallet not configured for real withdrawals' WHERE id = $1`,
@@ -82,6 +83,7 @@ export const POST = async ({ request }) => {
           }
           const beforeSeqno = await sender.contract.getSeqno();
           console.log(`[PROCESS] Current seqno=${beforeSeqno}`);
+          add('info', `[PROCESS] Current seqno=${beforeSeqno}`);
           // Нормализация TON-адреса: если raw (0:...), конвертируем в base64
           let normalizedAddress = withdrawal.wallet_address.trim().replace(/-/g, '');
           try {
@@ -98,6 +100,7 @@ export const POST = async ({ request }) => {
           // Попытка отправки через TonAPI (opentonapi)
           if (tonapiKey) {
             console.log('[PROCESS] Using TonAPI broadcast');
+            add('info', '[PROCESS] Using TonAPI broadcast');
             try {
               const { bocBase64 } = await ton.createTransferBoc(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
               const sendRes = await fetch(`${tonapiBase}/v2/blockchain/message`, {
@@ -109,6 +112,7 @@ export const POST = async ({ request }) => {
                 body: JSON.stringify({ boc: bocBase64 })
               });
               console.log(`[PROCESS] TonAPI broadcast status=${sendRes.status}`);
+              add('info', `[PROCESS] TonAPI broadcast status=${sendRes.status}`);
               if (!sendRes.ok) {
                 throw new Error(`TonAPI broadcast failed: ${sendRes.status}`);
               }
@@ -152,13 +156,16 @@ export const POST = async ({ request }) => {
               }
               txHashOrRef = realTxHash || `boc_w${withdrawal.id}`;
               transactionSuccess = true;
+              add('info', `[PROCESS] TonAPI success txHash=${txHashOrRef}`);
             } catch (e) {
               console.warn('[PROCESS] TonAPI broadcast failed, fallback to RPC send:', e);
+              add('warn', `[PROCESS] TonAPI broadcast failed, fallback to RPC send: ${e.message}`);
               // Фолбэк на прямую отправку через RPC
               await ton.sendTon(tonClient, sender, normalizedAddress, parseFloat(withdrawal.amount), `Withdrawal ${withdrawal.id}`);
               console.log(`[PROCESS] Sent via RPC. Waiting confirmation...`);
               const confirmed = await ton.waitSeqno(tonClient, sender.contract, beforeSeqno, 60000);
               console.log(`[PROCESS] Confirmation result=${confirmed}`);
+              add('info', `[PROCESS] RPC fallback confirmation result=${confirmed}`);
               if (!confirmed) {
                 throw new Error('Seqno confirmation timeout');
               }
@@ -214,6 +221,7 @@ export const POST = async ({ request }) => {
         }
       } catch (txErr) {
         console.error('[PROCESS] TON send error:', txErr);
+        add('error', `[PROCESS] TON send error: ${txErr.message}`);
         transactionSuccess = false;
       }
       
@@ -227,6 +235,7 @@ export const POST = async ({ request }) => {
         );
         await client.query('COMMIT');
         console.log(`[PROCESS] Success id=${withdrawal.id} hash=${txHashOrRef}`);
+        add('info', `[PROCESS] Success id=${withdrawal.id} hash=${txHashOrRef}`);
         return json({
           success: true,
           withdrawal: {
@@ -246,6 +255,7 @@ export const POST = async ({ request }) => {
         );
         await client.query('COMMIT');
         console.warn(`[PROCESS] Failed id=${withdrawal.id} funds returned`);
+        add('warn', `[PROCESS] Failed id=${withdrawal.id} funds returned`);
         return json({
           success: false,
           error: 'Transaction failed. Funds returned to your balance.',
@@ -263,6 +273,7 @@ export const POST = async ({ request }) => {
     }
   } catch (error) {
     console.error('[PROCESS] Process withdrawal fatal error:', error);
+    add('error', `[PROCESS] Process withdrawal fatal error: ${error.message}`);
     return json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 };
