@@ -1,16 +1,19 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { pool } from '$lib/server/db';
+import { add } from '$lib/server/logger-direct.js';
 import { WITHDRAWAL_CONFIG } from '$lib/config/withdrawals';
 
 // POST - автоматическая обработка очереди выплат
 export const POST: RequestHandler = async ({ request, fetch }) => {
+  add('info', '[AUTO] Start auto-process');
   try {
     const client = await pool.connect();
     
     try {
       const origin = new URL(request.url).origin;
       console.log(`[AUTO] Start auto-process origin=${origin}`);
+      add('info', `[AUTO] Start auto-process origin=${origin}`);
       // Получаем выплаты для автообработки
       const result = await client.query(`
         SELECT * FROM withdrawals 
@@ -23,6 +26,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
       const pendingWithdrawals = result.rows;
       const processedResults = [];
       console.log(`[AUTO] Found ${pendingWithdrawals.length} pending withdrawals`);
+      add('info', `[AUTO] Found ${pendingWithdrawals.length} pending withdrawals`);
 
       for (const withdrawal of pendingWithdrawals) {
         try {
@@ -47,6 +51,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
               message: processData.message || 'Processed successfully'
             });
             console.log(`[AUTO] Finished id=${withdrawal.id} success=${processData.success}`);
+            add('info', `[AUTO] Finished id=${withdrawal.id} success=${processData.success}`);
           } else {
             processedResults.push({
               id: withdrawal.id,
@@ -54,10 +59,12 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
               message: 'Process API call failed'
             });
             console.warn(`[AUTO] Process API call failed id=${withdrawal.id} status=${processRes.status}`);
+            add('warn', `[AUTO] Process API call failed id=${withdrawal.id} status=${processRes.status}`);
           }
 
         } catch (error) {
           console.error(`[AUTO] Failed to process withdrawal ${withdrawal.id}:`, error);
+          add('error', `[AUTO] Failed to process withdrawal ${withdrawal.id}: ${error.message}`);
           
           // Возвращаем статус обратно к pending в случае ошибки
           await client.query(
@@ -85,6 +92,7 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 
   } catch (error) {
     console.error('[AUTO] Auto-process queue error:', error);
+    add('error', `[AUTO] Auto-process queue error: ${error.message}`);
     return json({ 
       success: false, 
       error: 'Internal server error' 

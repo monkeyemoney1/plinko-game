@@ -5,14 +5,19 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ton = require(process.cwd() + '/server/ton-helper.cjs');
 
+// Import direct logger for better visibility
+const { add } = await import('$lib/server/logger-direct.js');
+
 // Получаем переменные окружения динамически
 const GAME_WALLET_ADDRESS = privateEnv.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
 const TONAPI_KEY = privateEnv.TON_API_KEY || '';
 
 export const POST = async ({ request }) => {
+  add('info', '[PROCESS] Start withdrawal processing');
   try {
     const { withdrawal_id } = await request.json();
     if (!withdrawal_id) {
+      add('error', '[PROCESS] Missing withdrawal_id');
       return json({ success: false, error: 'Missing withdrawal_id' }, { status: 400 });
     }
     const client = await pool.connect();
@@ -43,6 +48,7 @@ export const POST = async ({ request }) => {
       await client.query('UPDATE withdrawals SET status = $1 WHERE id = $2', ['processing', withdrawal.id]);
       await client.query('COMMIT');
       console.log(`[PROCESS] Start withdrawal id=${withdrawal.id} amount=${withdrawal.amount}`);
+      add('info', `[PROCESS] Start withdrawal id=${withdrawal.id} amount=${withdrawal.amount}`);
   const network = privateEnv.TON_NETWORK || 'mainnet';
   const toncenterApiKey = privateEnv.TONCENTER_API_KEY;
   const tonapiKey = privateEnv.TONAPI_KEY || TONAPI_KEY;

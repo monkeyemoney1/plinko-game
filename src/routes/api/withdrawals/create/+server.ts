@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { pool } from '$lib/server/db';
+import { add } from '$lib/server/logger-direct.js';
 import { 
   WITHDRAWAL_CONFIG, 
   calculateWithdrawalFee, 
@@ -11,6 +12,7 @@ import {
 
 // CLEAN VERSION: only creates withdrawal & triggers auto-process asynchronously.
 export const POST: RequestHandler = async ({ request }) => {
+  add('info', '[CREATE] Withdrawal creation request started');
   try {
     const { user_id, amount, wallet_address } = await request.json();
 
@@ -141,14 +143,18 @@ export const POST: RequestHandler = async ({ request }) => {
       await client.query('COMMIT');
 
       console.log(`[CREATE] Withdrawal created id=${withdrawalId} user=${user_id} gross=${feeInfo.grossAmount} net=${feeInfo.netAmount}`);
+      add('info', `[CREATE] Withdrawal created id=${withdrawalId} user=${user_id} gross=${feeInfo.grossAmount} net=${feeInfo.netAmount}`);
 
       // Trigger auto-process (fire & forget)
       (async () => {
         try {
           const origin = new URL(request.url).origin;
+          add('info', `[CREATE] Triggering auto-process with origin: ${origin}`);
           const res = await fetch(`${origin}/api/withdrawals/auto-process`, { method: 'POST' });
+          add('info', `[CREATE] Auto-process trigger response status ${res.status}`);
           console.log(`[CREATE] Auto-process trigger response status ${res.status}`);
         } catch (e) {
+          add('error', `[CREATE] Auto-process trigger failed id=${withdrawalId}: ${e.message}`);
           console.warn(`[CREATE] Auto-process trigger failed id=${withdrawalId}:`, e);
         }
       })();
@@ -176,6 +182,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
   } catch (error) {
+    add('error', `[CREATE] Error: ${error.message}`);
     console.error('[CREATE] Error:', error);
     return json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
