@@ -5,14 +5,13 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const ton = require(process.cwd() + '/server/ton-helper.cjs');
 
-// Import direct logger for better visibility
-const { add } = await import('$lib/server/logger-direct.js');
-
 // Получаем переменные окружения динамически
 const GAME_WALLET_ADDRESS = privateEnv.GAME_WALLET_ADDRESS || 'UQBUqJjVTapj2_4J_CMte8FWrJ2hy4WRBIJLBymMuATA2jCX';
 const TONAPI_KEY = privateEnv.TON_API_KEY || '';
 
 export const POST = async ({ request }) => {
+  // Import direct logger inside function to avoid top-level await
+  const { add } = await import('$lib/server/logger-direct.js');
   add('info', '[PROCESS] Start withdrawal processing');
   try {
     const { withdrawal_id } = await request.json();

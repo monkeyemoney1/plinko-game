@@ -1,11 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { getLogs, clearLogs, getStats } from '$lib/server/logger.js';
-import { env as privateEnv } from '$env/dynamic/private';
-
-import { json } from '@sveltejs/kit';
-import type { RequestHandler } from '@sveltejs/kit';
-import { getLogs, clearLogs, getStats } from '$lib/server/logger.js';
 import { getDirectLogs, getDirectStats } from '$lib/server/logger-direct.js';
 import { env as privateEnv } from '$env/dynamic/private';
 
