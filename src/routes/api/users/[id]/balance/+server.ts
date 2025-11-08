@@ -36,8 +36,8 @@ export const PUT: RequestHandler = async ({ params, request }) => {
         return json({ error: 'Insufficient TON balance' }, { status: 400 });
       }
   ton -= amt;
-  // 1 TON -> 105 Stars
-  stars += amt * 105;
+  // 1 TON -> 92 Stars
+  stars += amt * 92;
     } else {
       if (stars < amt) {
         await client.query('ROLLBACK');

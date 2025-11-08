@@ -474,7 +474,7 @@
                       <td>
                         {#if user.wallet_address}
                           <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(user.wallet_address)}>
-                            {user.wallet_address}
+                            {user.wallet_address.slice(0, 8)}...{user.wallet_address.slice(-6)}
                           </button>
                         {:else}
                           N/A
@@ -518,7 +518,7 @@
                       <td>{wallet.username || 'N/A'}</td>
                       <td>
                         <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(wallet.wallet_address)}>
-                          {wallet.wallet_address}
+                          {wallet.wallet_address.slice(0, 12)}...{wallet.wallet_address.slice(-8)}
                         </button>
                       </td>
                       <td>
@@ -664,6 +664,7 @@
                 <tr>
                   <th>ID</th>
                   <th>Тип</th>
+                  <th>Операция</th>
                   <th>Пользователь</th>
                   <th>Сумма</th>
                   <th>Статус</th>
@@ -677,6 +678,11 @@
                     <td>
                       <span class="type-badge {transaction.type}">
                         {transaction.type?.toUpperCase()}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="operation-badge {transaction.operation || 'deposit'}">
+                        {transaction.operation === 'withdrawal' ? '📤 Вывод' : '📥 Пополнение'}
                       </span>
                     </td>
                     <td>{transaction.user_id}</td>
@@ -1491,6 +1497,25 @@
   .type-badge.stars {
     background: #ffd700;
     color: #333;
+  }
+
+  /* Операции */
+  .operation-badge {
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: inline-block;
+  }
+
+  .operation-badge.deposit {
+    background: #10b981;
+    color: white;
+  }
+
+  .operation-badge.withdrawal {
+    background: #ef4444;
+    color: white;
   }
   
   /* Суммы */

@@ -558,7 +558,7 @@
           Конвертировать
         </button>
         <span class="w-full sm:w-auto text-white text-center">
-          {direction === 'tonToStars' ? `+${(convertAmount * 105).toFixed(2)} ⭐️` : `+${(convertAmount / 105).toFixed(4)} TON`}
+          {direction === 'tonToStars' ? `+${(convertAmount * 92).toFixed(2)} ⭐️` : `+${(convertAmount / 105).toFixed(4)} TON`}
         </span>
       </div>
     </div>

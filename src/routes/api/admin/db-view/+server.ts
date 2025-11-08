@@ -7,7 +7,7 @@ const ADMIN_PASSWORD = 'admin123';
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { password, table, limit = 10 } = await request.json();
+    const { password, table, limit = 10, action, query } = await request.json();
 
     // Проверка пароля
     if (password !== ADMIN_PASSWORD) {
@@ -15,6 +15,63 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
     const db = pool;
+
+    // Обработка статистики
+    if (action === 'stats') {
+      const stats = await db.query(`
+        SELECT 
+          pg_database.datname as database_name,
+          pg_size_pretty(pg_database_size(pg_database.datname)) as database_size
+        FROM pg_database
+        WHERE datistemplate = false;
+      `);
+
+      const tableStats = await db.query(`
+        SELECT 
+          schemaname,
+          tablename,
+          pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
+          n_tup_ins as inserts,
+          n_tup_upd as updates,
+          n_tup_del as deletes
+        FROM pg_stat_user_tables
+        ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
+        LIMIT 10;
+      `);
+
+      return json({
+        success: true,
+        databases: stats.rows,
+        topTables: tableStats.rows
+      });
+    }
+
+    // Обработка SQL запросов
+    if (action === 'query') {
+      if (!query) {
+        return json({ error: 'SQL запрос не указан' }, { status: 400 });
+      }
+
+      // Базовая защита от опасных операций
+      const normalizedQuery = query.toLowerCase().trim();
+      const allowedOperations = ['select', 'show', 'describe', 'explain'];
+      const isAllowed = allowedOperations.some((op: string) => normalizedQuery.startsWith(op));
+
+      if (!isAllowed) {
+        return json({ 
+          error: 'Разрешены только SELECT, SHOW, DESCRIBE и EXPLAIN запросы' 
+        }, { status: 403 });
+      }
+
+      const result = await db.query(query);
+
+      return json({
+        success: true,
+        rows: result.rows,
+        rowCount: result.rowCount,
+        fields: result.fields?.map(field => field.name) || []
+      });
+    }
 
     // Если таблица не указана, показываем список всех таблиц
     if (!table) {
