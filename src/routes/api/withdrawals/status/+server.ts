@@ -4,8 +4,8 @@ import { pool } from '$lib/server/db';
 
 export const GET: RequestHandler = async ({ url }) => {
   try {
-  const user_id = url.searchParams.get('user_id');
-  const withdrawal_id = url.searchParams.get('withdrawal_id');
+    const user_id = url.searchParams.get('user_id');
+    const withdrawal_id = url.searchParams.get('withdrawal_id');
 
     if (!user_id && !withdrawal_id) {
       return json({ 
@@ -16,27 +16,38 @@ export const GET: RequestHandler = async ({ url }) => {
 
     const client = await pool.connect();
     try {
+      let withdrawals;
+
       if (withdrawal_id) {
-        const res = await client.query(
-          `SELECT w.*, t.transaction_hash AS tx_hash, t.status AS tx_status, t.seqno, t.lt, t.block_number, t.fee, t.confirmed_at
-           FROM withdrawals w
-           LEFT JOIN ton_transactions t ON t.id = w.blockchain_transaction_id
-           WHERE w.id = $1`,
+        // Получаем конкретный вывод
+        const result = await client.query(
+          'SELECT * FROM withdrawals WHERE id = $1',
           [withdrawal_id]
         );
-        return json({ success: true, withdrawals: res.rows });
+        withdrawals = result.rows;
       } else {
-        const res = await client.query(
-          `SELECT w.*, t.transaction_hash AS tx_hash, t.status AS tx_status, t.seqno, t.lt, t.block_number, t.fee, t.confirmed_at
-           FROM withdrawals w
-           LEFT JOIN ton_transactions t ON t.id = w.blockchain_transaction_id
-           WHERE w.user_id = $1
-           ORDER BY w.created_at DESC
-           LIMIT 10`,
+        // Получаем все выводы пользователя
+        const result = await client.query(
+          'SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10',
           [user_id]
         );
-        return json({ success: true, withdrawals: res.rows });
+        withdrawals = result.rows;
       }
+
+      return json({
+        success: true,
+        withdrawals: withdrawals.map(w => ({
+          id: w.id,
+          user_id: w.user_id,
+          amount: parseFloat(w.amount),
+          wallet_address: w.wallet_address,
+          status: w.status,
+          transaction_hash: w.transaction_hash,
+          error_message: w.error_message,
+          created_at: w.created_at,
+          completed_at: w.completed_at
+        }))
+      });
 
     } finally {
       client.release();
