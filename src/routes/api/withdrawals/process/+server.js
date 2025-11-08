@@ -89,7 +89,7 @@ export const POST = async ({ request }) => {
           console.log(`[PROCESS] Current seqno=${beforeSeqno}`);
           add('info', `[PROCESS] Current seqno=${beforeSeqno}`);
           // Нормализация TON-адреса: если raw (0:...), конвертируем в base64
-          let normalizedAddress = withdrawal.wallet_address.trim().replace(/-/g, '');
+          let normalizedAddress = withdrawal.wallet_address.trim();
           add('info', `[PROCESS] Original address: ${withdrawal.wallet_address}`);
           
           try {
