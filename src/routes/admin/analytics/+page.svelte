@@ -8,6 +8,7 @@
     total_stars_spent: number;
     total_stars_received: number;
     last_activity: string;
+    ton_balance?: number;
   }
   
   interface WalletRegistration {
@@ -175,6 +176,7 @@
               <th>Кошелек</th>
               <th>Баланс</th>
               <th>Stars баланс</th>
+              <th>TON баланс</th>
               <th>Кол-во кошельков</th>
               <th>Stars транзакций</th>
               <th>Потрачено Stars</th>
@@ -216,6 +218,7 @@
                 </td>
                 <td>{user.balance}</td>
                 <td>{user.stars_balance || 0}</td>
+                <td>{Number(user.ton_balance || 0).toFixed(4)} TON</td>
                 <td>{user.wallet_count || 0}</td>
                 <td>{user.star_transactions_count || 0}</td>
                 <td>{user.total_stars_spent || 0}</td>
@@ -346,8 +349,9 @@
   }
   
   h1 {
-    color: #333;
+    color: #1a1a1a;
     margin-bottom: 2rem;
+    font-weight: 700;
   }
   
   .stats-grid {
@@ -407,13 +411,14 @@
     border: none;
     cursor: pointer;
     font-size: 1rem;
-    color: #666;
+    color: #2d2d2d;
+    font-weight: 600;
     border-bottom: 2px solid transparent;
     transition: all 0.3s ease;
   }
   
   .tab:hover {
-    color: #333;
+    color: #000;
   }
   
   .tab.active {
@@ -424,7 +429,8 @@
   .loading {
     text-align: center;
     padding: 3rem;
-    color: #666;
+    color: #2d2d2d;
+    font-weight: 600;
   }
   
   .data-table {
@@ -438,19 +444,24 @@
     width: 100%;
     border-collapse: collapse;
   }
-  
   th, td {
     padding: 0.8rem;
     text-align: left;
     border-bottom: 1px solid #e0e0e0;
+    color: #1a1a1a;
   }
   
   th {
     background: #f8f9fa;
-    font-weight: 600;
-    color: #333;
+    font-weight: 700;
+    color: #000;
     position: sticky;
     top: 0;
+  }
+  
+  td {
+    color: #2d2d2d;
+    font-weight: 500;
   }
   
   tr:hover {

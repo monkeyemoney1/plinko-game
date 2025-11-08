@@ -28,6 +28,7 @@
     total_stars_spent: number;
     total_stars_received: number;
     last_activity: string;
+    ton_balance?: number;
   }
   
   interface WalletRegistration {
@@ -450,6 +451,7 @@
                     <th>Адрес кошелька</th>
                     <th>Баланс</th>
                     <th>Stars баланс</th>
+                    <th>TON баланс</th>
                     <th>Stars потрачено</th>
                     <th>Регистрация</th>
                     <th>Действия</th>
@@ -480,6 +482,7 @@
                       </td>
                       <td>{user.balance}</td>
                       <td>{user.stars_balance || 0}</td>
+                      <td>{Number(user.ton_balance || 0).toFixed(4)} TON</td>
                       <td>{user.total_stars_spent || 0}</td>
                       <td>{formatDate(user.created_at)}</td>
                       <td>
@@ -802,6 +805,10 @@
                 <span class="info-value">{selectedUser.stars_balance || 0}</span>
               </div>
               <div class="info-item">
+                <span class="info-label">TON баланс:</span>
+                <span class="info-value">{Number(selectedUser.ton_balance || 0).toFixed(4)} TON</span>
+              </div>
+              <div class="info-item">
                 <span class="info-label">Stars потрачено:</span>
                 <span class="info-value">{selectedUser.total_stars_spent || 0}</span>
               </div>
@@ -1090,14 +1097,14 @@
     border-bottom: 3px solid transparent;
     cursor: pointer;
     font-size: 1rem;
-    font-weight: 500;
-    color: #666;
+    font-weight: 600;
+    color: #2d2d2d;
     transition: all 0.3s;
     white-space: nowrap;
   }
   
   .tab:hover {
-    color: #333;
+    color: #000;
     background: #f8f9fa;
   }
   
@@ -1151,7 +1158,8 @@
   
   .section-header h2 {
     margin: 0 0 1rem 0;
-    color: #333;
+    color: #1a1a1a;
+    font-weight: 700;
   }
   
   .search-input {
@@ -1221,11 +1229,16 @@
   
   th {
     background: #f8f9fa;
-    font-weight: 600;
-    color: #333;
+    font-weight: 700;
+    color: #000;
     position: sticky;
     top: 0;
     z-index: 10;
+  }
+  
+  td {
+    color: #2d2d2d;
+    font-weight: 500;
   }
   
   tr:hover {

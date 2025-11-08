@@ -41,7 +41,8 @@ export const GET: RequestHandler = async () => {
         COALESCE(stars_stats.transaction_count, 0) as star_transactions_count,
         COALESCE(stars_stats.total_spent, 0) as total_stars_spent,
         COALESCE(stars_stats.total_received, 0) as total_stars_received,
-        u.updated_at as last_activity
+        u.updated_at as last_activity,
+        COALESCE(u.ton_balance, 0) as ton_balance
       FROM users u
       LEFT JOIN (
         SELECT 
