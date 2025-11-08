@@ -1,79 +1,43 @@
-// In-memory logger для отладки на Render
-// Перехватывает console.log/error и сохраняет в кольцевой буфер
-
-const MAX_LOGS = 1000; // Максимум логов в памяти
+// In-memory logger for Render debugging
+const MAX_LOGS = 1000;
 const logs = [];
 
-// Сохраняем оригинальные функции
 const originalLog = console.log;
 const originalError = console.error;
 const originalWarn = console.warn;
 
-function addLog(level, args) {
-  const timestamp = new Date().toISOString();
-  const message = args.map(arg => {
-    if (typeof arg === 'object') {
-      try {
-        return JSON.stringify(arg, null, 2);
-      } catch {
-        return String(arg);
-      }
-    }
-    return String(arg);
-  }).join(' ');
-
-  const logEntry = {
-    timestamp,
+function add(level, args) {
+  const entry = {
+    timestamp: new Date().toISOString(),
     level,
-    message
+    message: args.map((a) => {
+      if (typeof a === 'string') return a;
+      try { return JSON.stringify(a); } catch { return String(a); }
+    }).join(' ')
   };
-
-  logs.push(logEntry);
-  
-  // Кольцевой буфер - удаляем старые логи
-  if (logs.length > MAX_LOGS) {
-    logs.shift();
-  }
+  logs.push(entry);
+  if (logs.length > MAX_LOGS) logs.shift();
 }
 
-// Перехватываем console методы
-console.log = function(...args) {
-  addLog('info', args);
-  originalLog.apply(console, args);
-};
+console.log = (...args) => { add('info', args); originalLog(...args); };
+console.error = (...args) => { add('error', args); originalError(...args); };
+console.warn = (...args) => { add('warn', args); originalWarn(...args); };
 
-console.error = function(...args) {
-  addLog('error', args);
-  originalError.apply(console, args);
-};
-
-console.warn = function(...args) {
-  addLog('warn', args);
-  originalWarn.apply(console, args);
-};
-
-// API для получения логов
 export function getLogs(limit = 500, level = null) {
-  let filtered = logs;
-  
-  if (level) {
-    filtered = logs.filter(log => log.level === level);
-  }
-  
-  return filtered.slice(-limit).reverse(); // Последние N логов, новые сверху
+  let list = logs;
+  if (level) list = list.filter((l) => l.level === level);
+  return list.slice(-limit).reverse();
 }
 
-export function clearLogs() {
-  logs.length = 0;
-}
+export function clearLogs() { logs.length = 0; }
 
-export function getLogsCount() {
+export function getStats() {
   return {
     total: logs.length,
-    info: logs.filter(l => l.level === 'info').length,
-    error: logs.filter(l => l.level === 'error').length,
-    warn: logs.filter(l => l.level === 'warn').length
+    info: logs.filter((l) => l.level === 'info').length,
+    warn: logs.filter((l) => l.level === 'warn').length,
+    error: logs.filter((l) => l.level === 'error').length
   };
 }
 
-console.log('[LOGGER] In-memory logger initialized, max logs:', MAX_LOGS);
+console.log('[LOGGER] Initialized');
