@@ -210,7 +210,7 @@
                       on:click={() => copyToClipboard(user.wallet_address)}
                       title="Копировать адрес кошелька"
                     >
-                      {user.wallet_address.slice(0, 8)}...{user.wallet_address.slice(-6)}
+                      {user.wallet_address}
                     </button>
                   {:else}
                     N/A
@@ -270,7 +270,7 @@
                     class="copy-btn wallet-addr"
                     on:click={() => copyToClipboard(wallet.wallet_address)}
                   >
-                    {wallet.wallet_address.slice(0, 12)}...{wallet.wallet_address.slice(-8)}
+                    {wallet.wallet_address}
                   </button>
                 </td>
                 <td>

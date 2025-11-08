@@ -105,7 +105,8 @@ export const POST: RequestHandler = async ({ request }) => {
     // Если таблица указана, показываем её данные
     const validTables = [
       'users', 'game_sessions', 'game_bets', 'ton_transactions',
-      'balance_operations', 'deposits', 'event_logs', 'user_settings'
+      'balance_operations', 'deposits', 'event_logs', 'user_settings',
+      'star_transactions', 'withdrawals', 'user_wallets', 'game_results', 'bets'
     ];
 
     if (!validTables.includes(table)) {

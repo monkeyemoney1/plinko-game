@@ -474,7 +474,7 @@
                       <td>
                         {#if user.wallet_address}
                           <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(user.wallet_address)}>
-                            {user.wallet_address.slice(0, 8)}...{user.wallet_address.slice(-6)}
+                            {user.wallet_address}
                           </button>
                         {:else}
                           N/A
@@ -518,7 +518,7 @@
                       <td>{wallet.username || 'N/A'}</td>
                       <td>
                         <button class="copy-btn" on:click|stopPropagation={() => copyToClipboard(wallet.wallet_address)}>
-                          {wallet.wallet_address.slice(0, 12)}...{wallet.wallet_address.slice(-8)}
+                          {wallet.wallet_address}
                         </button>
                       </td>
                       <td>
