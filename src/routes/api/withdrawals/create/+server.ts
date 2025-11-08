@@ -9,6 +9,7 @@ import {
   requiresManualReview
 } from '$lib/config/withdrawals';
 
+// CLEAN VERSION: only creates withdrawal & triggers auto-process asynchronously.
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const { user_id, amount, wallet_address } = await request.json();
@@ -49,6 +50,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
       const user = userResult.rows[0];
       const currentBalance = parseFloat(user.ton_balance);
+      const accountAge = Date.now() - new Date(user.created_at).getTime();
+      const accountAgeHours = accountAge / (1000 * 60 * 60);
+
+      // Проверка возраста аккаунта отключена (MIN_ACCOUNT_AGE_HOURS = 0)
 
       // Получаем статистику выводов за сегодня
       const today = new Date();
@@ -135,16 +140,16 @@ export const POST: RequestHandler = async ({ request }) => {
 
       await client.query('COMMIT');
 
-      console.log(`Withdrawal request created: ID ${withdrawalId}, User ${user_id}, Amount ${feeInfo.grossAmount} TON (net: ${feeInfo.netAmount}, fee: ${feeInfo.fee})`);
+      console.log(`[CREATE] Withdrawal created id=${withdrawalId} user=${user_id} gross=${feeInfo.grossAmount} net=${feeInfo.netAmount}`);
 
-      // НЕ отправляем транзакцию в этом запросе синхронно, чтобы избежать таймаутов и 429.
-      // Ставим заявку в очередь и триггерим фоновую обработку через auto-process.
-      ;(async () => {
+      // Trigger auto-process (fire & forget)
+      (async () => {
         try {
           const origin = new URL(request.url).origin;
-          await fetch(`${origin}/api/withdrawals/auto-process`, { method: 'POST' });
+          const res = await fetch(`${origin}/api/withdrawals/auto-process`, { method: 'POST' });
+          console.log(`[CREATE] Auto-process trigger response status ${res.status}`);
         } catch (e) {
-          console.warn(`[Withdrawal ${withdrawalId}] Failed to trigger auto-process:`, e);
+          console.warn(`[CREATE] Auto-process trigger failed id=${withdrawalId}:`, e);
         }
       })();
 
@@ -156,7 +161,7 @@ export const POST: RequestHandler = async ({ request }) => {
           gross_amount: feeInfo.grossAmount,
           net_amount: feeInfo.netAmount,
           fee: feeInfo.fee,
-          wallet_address: normalizedWalletAddress,
+          wallet_address,
           status: status,
           created_at: withdrawalResult.rows[0].created_at
         },
@@ -171,10 +176,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
 
   } catch (error) {
-    console.error('Create withdrawal error:', error);
-    return json({ 
-      success: false, 
-      error: 'Internal server error' 
-    }, { status: 500 });
+    console.error('[CREATE] Error:', error);
+    return json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 };
