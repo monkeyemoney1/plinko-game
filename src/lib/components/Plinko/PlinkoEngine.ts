@@ -236,15 +236,9 @@ class PlinkoEngine {
             [ball.id]: { betAmount: this.betAmount, betId } 
           }));
 
-          // Обновляем баланс с сервера
+          // Обновляем баланс с сервера (он УЖЕ учитывает списание)
           if (!Number.isNaN(serverBalance)) {
-            // Получаем сумму ставок от активных мячей (исключая текущий)
-            const activeBets = get(betAmountOfExistingBalls);
-            const remainingBetsSum = Object.entries(activeBets)
-              .filter(([ballId]) => Number(ballId) !== ball.id)
-              .reduce((sum, [, data]) => sum + data.betAmount, 0);
-            
-            balance.set(serverBalance - remainingBetsSum);
+            balance.set(serverBalance);
           } else {
             // Локальное списание если нет данных с сервера
             balance.update((b) => b - this.betAmount);
@@ -364,14 +358,8 @@ class PlinkoEngine {
             const data = await res.json();
             const serverBalance = Number(data?.balance?.stars_balance);
             if (!Number.isNaN(serverBalance)) {
-              // Получаем сумму ставок от активных мячей (исключая текущий мяч)
-              const activeBets = get(betAmountOfExistingBalls);
-              const remainingBetsSum = Object.entries(activeBets)
-                .filter(([ballId]) => Number(ballId) !== ball.id)
-                .reduce((sum, [, data]) => sum + data.betAmount, 0);
-              
-              // Устанавливаем баланс с учётом активных ставок
-              balance.set(serverBalance - remainingBetsSum);
+              // Устанавливаем баланс с сервера (он УЖЕ учитывает выплату)
+              balance.set(serverBalance);
             } else {
               // fallback - добавляем только выплату
               balance.update((b) => b + payoutValue);
