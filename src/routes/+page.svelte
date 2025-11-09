@@ -33,6 +33,7 @@
       setBalanceFromLocalStorage();
     }
   });
+</script>
 
 <div class="relative flex min-h-dvh w-full flex-col">
   <nav class="sticky top-0 z-10 w-full bg-gray-700 px-5 drop-shadow-lg">
