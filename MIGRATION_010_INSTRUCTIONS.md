@@ -27,14 +27,59 @@
 
 ## Как применить миграцию
 
-### Локально (для разработки)
+### Вариант 1: Через API (РЕКОМЕНДУЕТСЯ если Shell платный)
+
+1. **Проверьте статус миграции:**
+```bash
+curl https://your-app.onrender.com/api/admin/migrate
+```
+
+2. **Примените миграцию:**
+```bash
+curl -X POST https://your-app.onrender.com/api/admin/migrate \
+  -H "Content-Type: application/json" \
+  -d '{"password":"your-admin-password"}'
+```
+
+⚠️ **Важно:** Установите переменную окружения `ADMIN_MIGRATION_PASSWORD` в Render Dashboard → Environment
+
+Или используйте браузер:
+- Откройте DevTools (F12) → Console
+- Выполните:
+```javascript
+fetch('https://your-app.onrender.com/api/admin/migrate', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({password: 'your-admin-password'})
+}).then(r => r.json()).then(console.log)
+```
+
+### Вариант 2: Через PostgreSQL клиент (pgAdmin, DBeaver, TablePlus)
+
+1. Получите `DATABASE_URL` из Render Dashboard → Environment
+2. Подключитесь к базе данных
+3. Выполните SQL из `migrations/010_add_game_bets_status.sql`:
+
+```sql
+ALTER TABLE game_bets 
+ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'completed',
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+UPDATE game_bets SET status = 'completed' WHERE status IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_game_bets_status ON game_bets(status);
+
+COMMENT ON COLUMN game_bets.status IS 'Статус ставки: pending (ожидает завершения), completed (завершена)';
+```
+
+### Вариант 3: Локально (для разработки)
 
 ```bash
 # Убедитесь что DATABASE_URL настроен в .env
 node apply-migration-010.js
 ```
 
-### На Render (продакшен)
+### Вариант 4: На Render через Shell (только для платных планов)
 
 1. Зайдите в Dashboard → Your Service → Shell
 
