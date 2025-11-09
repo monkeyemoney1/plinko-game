@@ -4,12 +4,11 @@
   import LiveStatsWindow from '$lib/components/LiveStatsWindow/LiveStatsWindow.svelte';
   import Plinko from '$lib/components/Plinko';
   import Sidebar from '$lib/components/Sidebar';
-  import { setBalanceFromLocalStorage, writeBalanceToLocalStorage } from '$lib/utils/game';
+  import { setBalanceFromLocalStorage } from '$lib/utils/game';
   import GitHubLogo from 'phosphor-svelte/lib/GithubLogo';
 
   $effect(() => {
-    setBalanceFromLocalStorage();
-    // После загрузки страницы пробуем подтянуть баланс из БД, если есть user_id
+    // После загрузки страницы загружаем баланс из БД, если есть user_id
     const userId = localStorage.getItem('user_id');
     if (userId) {
       fetch(`/api/users/${userId}/balance`)
@@ -17,24 +16,23 @@
         .then((data) => {
           if (data?.user?.balance?.stars != null) {
             import('$lib/stores/game').then(({ balance }) => {
-              // Не перезаписываем баланс, если он уже был изменён после загрузки страницы
-              const local = localStorage.getItem('plinko_balance');
-              const loaded = Number(local);
               const fromServer = Number(data.user.balance.stars) || 0;
-              // Если баланс в localStorage совпадает с дефолтным, то можно обновить из БД
-              if (isNaN(loaded) || loaded === 100) {
-                balance.set(fromServer);
-              }
-              // Если пользователь уже сделал ставку (баланс изменился), не трогаем
+              // ВСЕГДА устанавливаем баланс с сервера как источник правды
+              balance.set(fromServer);
+              // Сохраняем в localStorage для кэша
+              localStorage.setItem('plinko_balance', String(fromServer));
             });
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          // Если сервер недоступен, используем локальный кэш
+          setBalanceFromLocalStorage();
+        });
+    } else {
+      // Нет user_id - используем локальное значение
+      setBalanceFromLocalStorage();
     }
   });
-</script>
-
-<svelte:window onbeforeunload={writeBalanceToLocalStorage} />
 
 <div class="relative flex min-h-dvh w-full flex-col">
   <nav class="sticky top-0 z-10 w-full bg-gray-700 px-5 drop-shadow-lg">
