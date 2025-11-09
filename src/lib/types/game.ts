@@ -22,7 +22,10 @@ export enum RiskLevel {
  * When a ball enters a bin, its record is removed.
  */
 export type BetAmountOfExistingBalls = {
-  [ballId: number]: number;
+  [ballId: number]: {
+    betAmount: number;
+    betId: number | null;
+  };
 };
 
 export type WinRecord = {

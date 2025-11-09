@@ -209,9 +209,71 @@ class PlinkoEngine {
     );
     Matter.Composite.add(this.engine.world, ball);
 
-    betAmountOfExistingBalls.update((value) => ({ ...value, [ball.id]: this.betAmount }));
-    // Списываем ставку локально для мгновенного отображения
-    balance.update((balance) => balance - this.betAmount);
+    // СРАЗУ списываем ставку через API
+    try {
+      const userId = window.localStorage.getItem('user_id');
+      if (userId) {
+        const res = await fetch('/api/bets/place', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: Number(userId),
+            bet_amount: this.betAmount,
+            currency: 'STARS',
+            risk_level: this.riskLevel,
+            rows_count: this.rowCount,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const betId = data.bet_id;
+          const serverBalance = Number(data?.balance?.stars_balance);
+
+          // Сохраняем bet_id для мяча
+          betAmountOfExistingBalls.update((value) => ({ 
+            ...value, 
+            [ball.id]: { betAmount: this.betAmount, betId } 
+          }));
+
+          // Обновляем баланс с сервера
+          if (!Number.isNaN(serverBalance)) {
+            // Получаем сумму ставок от активных мячей (исключая текущий)
+            const activeBets = get(betAmountOfExistingBalls);
+            const remainingBetsSum = Object.entries(activeBets)
+              .filter(([ballId]) => Number(ballId) !== ball.id)
+              .reduce((sum, [, data]) => sum + data.betAmount, 0);
+            
+            balance.set(serverBalance - remainingBetsSum);
+          } else {
+            // Локальное списание если нет данных с сервера
+            balance.update((b) => b - this.betAmount);
+          }
+        } else {
+          // Если API недоступен, списываем локально
+          betAmountOfExistingBalls.update((value) => ({ 
+            ...value, 
+            [ball.id]: { betAmount: this.betAmount, betId: null } 
+          }));
+          balance.update((b) => b - this.betAmount);
+        }
+      } else {
+        // Нет user_id - локальное списание
+        betAmountOfExistingBalls.update((value) => ({ 
+          ...value, 
+          [ball.id]: { betAmount: this.betAmount, betId: null } 
+        }));
+        balance.update((b) => b - this.betAmount);
+      }
+    } catch (error) {
+      console.error('Failed to place bet:', error);
+      // Fallback - локальное списание
+      betAmountOfExistingBalls.update((value) => ({ 
+        ...value, 
+        [ball.id]: { betAmount: this.betAmount, betId: null } 
+      }));
+      balance.update((b) => b - this.betAmount);
+    }
   }
 
   /**
@@ -256,7 +318,9 @@ class PlinkoEngine {
   private async handleBallEnterBin(ball: Matter.Body) {
     const binIndex = this.pinsLastRowXCoords.findLastIndex((pinX) => pinX < ball.position.x);
   if (binIndex !== -1 && binIndex < this.pinsLastRowXCoords.length - 1) {
-      const betAmount = get(betAmountOfExistingBalls)[ball.id] ?? 0;
+      const ballData = get(betAmountOfExistingBalls)[ball.id];
+      const betAmount = ballData?.betAmount ?? 0;
+      const betId = ballData?.betId;
       const multiplier = binPayouts[this.rowCount][this.riskLevel][binIndex];
       const payoutValue = betAmount * multiplier;
       const profit = payoutValue - betAmount;
@@ -279,28 +343,23 @@ class PlinkoEngine {
         const lastTotalProfit = history.slice(-1)[0];
         return [...history, lastTotalProfit + profit];
       });
-      // Синхронизируем с БД: создаём ставку на сервере и забираем обновлённый баланс
+      
+      // Завершаем ставку и начисляем выигрыш
       try {
-        const userId = window.localStorage.getItem('user_id');
-        if (userId) {
-          const res = await fetch('/api/bets', {
+        if (betId) {
+          const res = await fetch('/api/bets/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              user_id: Number(userId),
-              bet_amount: this.betAmount,
-              currency: 'STARS',
-              risk_level: this.riskLevel,
-              rows_count: this.rowCount,
-              client_result: {
-                multiplier,
-                payout: payoutValue,
-                profit,
-                is_win: multiplier > 1,
-                ball_path: [] as number[],
-              },
+              bet_id: betId,
+              multiplier,
+              payout: payoutValue,
+              profit,
+              is_win: multiplier > 1,
+              ball_path: [] as number[],
             }),
           });
+          
           if (res.ok) {
             const data = await res.json();
             const serverBalance = Number(data?.balance?.stars_balance);
@@ -309,7 +368,7 @@ class PlinkoEngine {
               const activeBets = get(betAmountOfExistingBalls);
               const remainingBetsSum = Object.entries(activeBets)
                 .filter(([ballId]) => Number(ballId) !== ball.id)
-                .reduce((sum, [, betAmount]) => sum + betAmount, 0);
+                .reduce((sum, [, data]) => sum + data.betAmount, 0);
               
               // Устанавливаем баланс с учётом активных ставок
               balance.set(serverBalance - remainingBetsSum);
@@ -322,11 +381,13 @@ class PlinkoEngine {
             balance.update((b) => b + payoutValue);
           }
         } else {
-          // fallback - добавляем только выплату
+          // Нет bet_id - локальное начисление
           balance.update((b) => b + payoutValue);
         }
-      } catch {
-        balance.update((b) => b + profit);
+      } catch (error) {
+        console.error('Failed to complete bet:', error);
+        // Fallback - локальное начисление
+        balance.update((b) => b + payoutValue);
       }
     }
 
